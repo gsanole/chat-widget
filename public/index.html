@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat Support &mdash; Home</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --bg-grad: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #312e81 100%);
+            --card: rgba(255, 255, 255, 0.06);
+            --card-border: rgba(255, 255, 255, 0.10);
+            --text: #f1f5f9;
+            --text-dim: #94a3b8;
+            --accent: #60a5fa;
+            --accent-2: #a78bfa;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100%;
+        }
+
+        body {
+            background: var(--bg-grad);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 4rem 1.5rem 2rem;
+            width: 100%;
+            flex: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 1.25rem;
+        }
+
+        .logo-mark {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 5vw, 3.25rem);
+            margin: 0 0 0.75rem;
+            background: linear-gradient(90deg, #fff 0%, #c7d2fe 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: var(--text-dim);
+            font-size: 1.1rem;
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            padding: 0.35rem 0.85rem;
+            background: rgba(34, 197, 94, 0.12);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 999px;
+            color: #86efac;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1.25rem;
+            margin-top: 2rem;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            padding: 1.5rem;
+            text-decoration: none;
+            color: inherit;
+            transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(96, 165, 250, 0.4);
+            background: rgba(255, 255, 255, 0.09);
+        }
+
+        .card-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            margin-bottom: 0.9rem;
+            background: rgba(96, 165, 250, 0.15);
+            border: 1px solid rgba(96, 165, 250, 0.25);
+        }
+
+        .card h3 {
+            margin: 0 0 0.35rem;
+            font-size: 1.1rem;
+        }
+
+        .card p {
+            margin: 0;
+            color: var(--text-dim);
+            font-size: 0.92rem;
+        }
+
+        .card-path {
+            margin-top: 0.85rem;
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 0.8rem;
+            color: var(--accent);
+        }
+
+        .embed {
+            margin-top: 3rem;
+            padding: 1.5rem;
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+        }
+
+        .embed h2 {
+            margin: 0 0 0.75rem;
+            font-size: 1.05rem;
+            color: var(--text);
+        }
+
+        .embed p {
+            color: var(--text-dim);
+            margin: 0 0 1rem;
+            font-size: 0.92rem;
+        }
+
+        pre {
+            margin: 0;
+            padding: 1rem 1.1rem;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            overflow-x: auto;
+            font-size: 0.85rem;
+            color: #e2e8f0;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <span class="logo-mark">💬</span>
+                <span>Chat Support</span>
+            </div>
+            <h1>Customer Chat Platform</h1>
+            <p class="subtitle">
+                Self-hosted live chat with a built-in chatbot, multi-site support,
+                agent dashboard, and embeddable widget.
+            </p>
+            <div class="status">Server online</div>
+        </header>
+
+        <div class="grid">
+            <a class="card" href="/demo.html">
+                <div class="card-icon">🧪</div>
+                <h3>Customer Demo</h3>
+                <p>Try the chat widget as an end user. Sends bot messages and can escalate to a live agent.</p>
+                <span class="card-path">/demo.html</span>
+            </a>
+
+            <a class="card" href="/admin">
+                <div class="card-icon">🛡️</div>
+                <h3>Admin Dashboard</h3>
+                <p>Sign in to handle live conversations, manage tickets, and configure the chatbot.</p>
+                <p style="margin-top:8px;font-size:0.85rem;"><strong>Demo login:</strong> <code>superadmin</code> /
+                    <code>demo1234!</code></p>
+                <span class="card-path">/admin</span>
+            </a>
+
+            <a class="card" href="/sites.html">
+                <div class="card-icon">🌐</div>
+                <h3>Sites</h3>
+                <p>Manage tenant sites, API keys, and per-site chatbot configuration.</p>
+                <span class="card-path">/sites.html</span>
+            </a>
+
+            <a class="card" href="/users.html">
+                <div class="card-icon">👥</div>
+                <h3>Users</h3>
+                <p>Create and manage admin/agent users, roles, and 2FA settings.</p>
+                <span class="card-path">/users.html</span>
+            </a>
+        </div>
+
+        <section class="embed">
+            <h2>Embed the widget on any site</h2>
+            <p>Drop this snippet anywhere in your HTML:</p>
+            <pre>&lt;script src="http://localhost:3000/widget.js"
+        data-site-key="YOUR_SITE_API_KEY"&gt;&lt;/script&gt;</pre>
+        </section>
+    </div>
+
+    <footer>Chat Support v2.0 &middot; Powered by Node.js + Socket.IO</footer>
+</body>
+
+</html>

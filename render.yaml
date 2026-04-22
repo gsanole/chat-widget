@@ -1,0 +1,31 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Apply via: Render dashboard → New → Blueprint → connect this repo.
+
+services:
+  - type: web
+    name: customer-chat
+    runtime: node
+    plan: starter            # $7/mo, always-on. Free plan sleeps and breaks Socket.IO.
+    region: oregon           # change if you prefer fra / singapore / etc.
+    branch: main
+    buildCommand: npm ci
+    startCommand: node server.js
+    healthCheckPath: /api/ready
+    autoDeploy: true
+
+    # Persistent disk for data/*.json (JsonDB).
+    # Without this, every deploy wipes users / tickets / sites / chat history.
+    disk:
+      name: chat-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: JWT_SECRET
+        generateValue: true   # Render generates a strong random value once.
+      - key: ALLOWED_ORIGINS
+        sync: false           # set in dashboard, e.g. https://yoursite.com,https://www.yoursite.com

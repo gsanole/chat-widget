@@ -1,0 +1,44 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 60
+      arrivalRate: 20
+      name: "Ramp up load"
+    - duration: 30
+      arrivalRate: 50
+      name: "Peak load"
+
+scenarios:
+  # Test health endpoint
+  - name: "Health Check"
+    weight: 3
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200
+
+  # Test static file loading
+  - name: "Static Files"
+    weight: 2
+    flow:
+      - get:
+          url: "/demo.html"
+          expect:
+            - statusCode: 200
+      - get:
+          url: "/widget.js"
+          expect:
+            - statusCode: 200
+
+  # Test admin page
+  - name: "Admin Page"
+    weight: 1
+    flow:
+      - get:
+          url: "/admin.html"
+          expect:
+            - statusCode: 200

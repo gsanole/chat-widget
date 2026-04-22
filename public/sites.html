@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Management - Chat Support Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f4f6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            color: #1f2937;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #b91c1c;
+        }
+
+        .btn-success {
+            background: #16a34a;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #d97706;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        .card-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-header h2 {
+            font-size: 18px;
+            color: #1f2937;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+            font-size: 13px;
+        }
+
+        td {
+            color: #4b5563;
+            font-size: 14px;
+        }
+
+        tr:hover {
+            background: #f9fafb;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-active {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-inactive {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card h3 {
+            font-size: 13px;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 18px;
+            color: #1f2937;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6b7280;
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #374151;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .api-key-display {
+            background: #f3f4f6;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+            margin-bottom: 8px;
+        }
+
+        .embed-code {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .color-preview {
+            display: flex;
+            gap: 16px;
+            margin-top: 8px;
+        }
+
+        .color-swatch {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            border: 2px solid #e5e7eb;
+        }
+
+        .back-link {
+            color: #2563eb;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 16px;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .alert-success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .copy-btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+
+        .copy-btn:hover {
+            background: #1d4ed8;
+        }
+
+        .site-stats {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .site-stats span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <a href="/admin/dashboard.html" class="back-link">← Back to Dashboard</a>
+
+        <div class="header">
+            <h1>Site Management</h1>
+            <button class="btn btn-primary" id="btn-add-site">+ Add Site/App</button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Sites</h3>
+                <div class="value" id="stat-total">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Active Sites</h3>
+                <div class="value" id="stat-active">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Tickets</h3>
+                <div class="value" id="stat-tickets">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Open Tickets</h3>
+                <div class="value" id="stat-open">0</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Registered Sites/Apps</h2>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Domain</th>
+                        <th>Status</th>
+                        <th>Tickets</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sites-table">
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 40px;">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Create Site Modal -->
+    <div class="modal-overlay" id="create-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Add New Site/App</h3>
+                <button type="button" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Site Name *</label>
+                    <input type="text" id="new-name" placeholder="My Website" />
+                </div>
+                <div class="form-group">
+                    <label>Domain *</label>
+                    <input type="text" id="new-domain" placeholder="example.com" />
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="new-description" placeholder="Brief description of this site/app"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Primary Color</label>
+                    <input type="color" id="new-color-primary" value="#2563eb" />
+                </div>
+                <div class="form-group">
+                    <label>Secondary Color</label>
+                    <input type="color" id="new-color-secondary" value="#1e40af" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary">Cancel</button>
+                <button type="button" class="btn btn-primary">Create Site</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Site Modal -->
+    <div class="modal-overlay" id="edit-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Edit Site</h3>
+                <button type="button" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-site-id" />
+                <div class="form-group">
+                    <label>Site Name</label>
+                    <input type="text" id="edit-name" />
+                </div>
+                <div class="form-group">
+                    <label>Domain</label>
+                    <input type="text" id="edit-domain" />
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="edit-description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="edit-active">
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Primary Color</label>
+                    <input type="color" id="edit-color-primary" />
+                </div>
+                <div class="form-group">
+                    <label>Secondary Color</label>
+                    <input type="color" id="edit-color-secondary" />
+                </div>
+                <div class="form-group">
+                    <label>Custom Welcome Message (leave blank for default)</label>
+                    <textarea id="edit-welcome-message" placeholder="Hi! How can we help you today?"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary">Cancel</button>
+                <button type="button" class="btn btn-primary">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Key Modal -->
+    <div class="modal-overlay" id="apikey-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Site API Key</h3>
+                <button type="button" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 16px; color: #6b7280;">Use this API key in your chat widget to connect this
+                    site to the support system.</p>
+                <div class="api-key-display" id="display-api-key"></div>
+                <button class="copy-btn" onclick="copyApiKey()">Copy API Key</button>
+                <div style="margin-top: 24px;">
+                    <button class="btn btn-warning" onclick="regenerateApiKey()">Regenerate API Key</button>
+                    <p style="margin-top: 8px; font-size: 12px; color: #dc2626;">Warning: Regenerating will break
+                        existing integrations until updated.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Embed Code Modal -->
+    <div class="modal-overlay" id="embed-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Embed Code</h3>
+                <button type="button" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 16px; color: #6b7280;">Add this code to your website to enable the chat widget:
+                </p>
+                <div class="embed-code" id="display-embed-code"></div>
+                <button class="copy-btn" onclick="copyEmbedCode()">Copy Embed Code</button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let token = localStorage.getItem('adminToken');
+        let currentUser = null;
+        let currentSiteId = null;
+
+        // Check authentication
+        async function checkAuth() {
+            if (!token) {
+                window.location.href = '/admin';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/verify`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!res.ok) {
+                    localStorage.removeItem('adminToken');
+                    window.location.href = '/admin';
+                    return;
+                }
+
+                const data = await res.json();
+                currentUser = data.user;
+
+                if (currentUser.role !== 'super_admin') {
+                    showAlert('Access denied. Super admin privileges required.', 'error');
+                    setTimeout(() => window.location.href = '/admin', 2000);
+                    return;
+                }
+
+                loadSites();
+            } catch (err) {
+                console.error('Auth check failed:', err);
+                window.location.href = '/admin';
+            }
+        }
+
+        // API helper
+        async function api(endpoint, options = {}) {
+            const res = await fetch(`${API_BASE}${endpoint}`, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    ...options.headers
+                }
+            });
+
+            if (!res.ok) {
+                const error = await res.json();
+                throw new Error(error.error || 'Request failed');
+            }
+
+            return res.json();
+        }
+
+        // Show alert
+        function showAlert(message, type = 'success') {
+            const container = document.getElementById('alert-container');
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+
+        // Load sites
+        async function loadSites() {
+            try {
+                const sites = await api('/sites');
+                renderSitesTable(sites);
+                updateStats(sites);
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        function renderSitesTable(sites) {
+            const tbody = document.getElementById('sites-table');
+            if (sites.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #6b7280;">No sites registered. Click "Add Site/App" to get started.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = sites.map(site => `
+        <tr>
+          <td><strong>${escapeHtml(site.name)}</strong><br><span style="font-size: 12px; color: #6b7280;">${escapeHtml(site.description || '')}</span></td>
+          <td>${escapeHtml(site.domain)}</td>
+          <td><span class="badge badge-${site.is_active ? 'active' : 'inactive'}">${site.is_active ? 'Active' : 'Inactive'}</span></td>
+          <td>
+            <div class="site-stats">
+              <span title="Open">${site.stats?.open_tickets || 0} open</span>
+              <span title="Total">${site.stats?.total_tickets || 0} total</span>
+            </div>
+          </td>
+          <td>${formatDate(site.created_at)}</td>
+          <td class="actions">
+            <button class="action-btn btn-secondary" data-action="edit" data-site-id="${site.id}">Edit</button>
+            <button class="action-btn btn-secondary" data-action="apikey" data-site-id="${site.id}">API Key</button>
+            <button class="action-btn btn-secondary" data-action="embed" data-site-id="${site.id}">Embed</button>
+            <button class="action-btn btn-danger" data-action="delete" data-site-id="${site.id}" data-site-name="${escapeHtml(site.name)}">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+        }
+
+        function updateStats(sites) {
+            document.getElementById('stat-total').textContent = sites.length;
+            document.getElementById('stat-active').textContent = sites.filter(s => s.is_active).length;
+
+            let totalTickets = 0;
+            let openTickets = 0;
+            sites.forEach(s => {
+                totalTickets += s.stats?.total_tickets || 0;
+                openTickets += s.stats?.open_tickets || 0;
+            });
+            document.getElementById('stat-tickets').textContent = totalTickets;
+            document.getElementById('stat-open').textContent = openTickets;
+        }
+
+        // Create site
+        function showCreateModal() {
+            document.getElementById('new-name').value = '';
+            document.getElementById('new-domain').value = '';
+            document.getElementById('new-description').value = '';
+            document.getElementById('new-color-primary').value = '#2563eb';
+            document.getElementById('new-color-secondary').value = '#1e40af';
+            document.getElementById('create-modal').classList.add('active');
+        }
+
+        async function createSite() {
+            const name = document.getElementById('new-name').value.trim();
+            const domain = document.getElementById('new-domain').value.trim();
+            const description = document.getElementById('new-description').value.trim();
+            const color_primary = document.getElementById('new-color-primary').value;
+            const color_secondary = document.getElementById('new-color-secondary').value;
+
+            if (!name || !domain) {
+                showAlert('Name and domain are required', 'error');
+                return;
+            }
+
+            try {
+                const site = await api('/sites', {
+                    method: 'POST',
+                    body: JSON.stringify({ name, domain, description, color_primary, color_secondary })
+                });
+                closeModal('create-modal');
+                showAlert(`Site "${name}" created successfully!`);
+                loadSites();
+
+                // Show the API key modal
+                currentSiteId = site.id;
+                document.getElementById('display-api-key').textContent = site.api_key;
+                document.getElementById('apikey-modal').classList.add('active');
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        // Edit site
+        async function editSite(siteId) {
+            try {
+                const site = await api(`/sites/${siteId}`);
+
+                document.getElementById('edit-site-id').value = siteId;
+                document.getElementById('edit-name').value = site.name;
+                document.getElementById('edit-domain').value = site.domain;
+                document.getElementById('edit-description').value = site.description || '';
+                document.getElementById('edit-active').value = site.is_active ? 'true' : 'false';
+                document.getElementById('edit-color-primary').value = site.color_primary || '#2563eb';
+                document.getElementById('edit-color-secondary').value = site.color_secondary || '#1e40af';
+                document.getElementById('edit-welcome-message').value = site.welcome_message || '';
+                document.getElementById('edit-modal').classList.add('active');
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        async function updateSite() {
+            const siteId = document.getElementById('edit-site-id').value;
+            const name = document.getElementById('edit-name').value.trim();
+            const domain = document.getElementById('edit-domain').value.trim();
+            const description = document.getElementById('edit-description').value.trim();
+            const is_active = document.getElementById('edit-active').value === 'true';
+            const color_primary = document.getElementById('edit-color-primary').value;
+            const color_secondary = document.getElementById('edit-color-secondary').value;
+            const welcome_message = document.getElementById('edit-welcome-message').value.trim() || null;
+
+            try {
+                await api(`/sites/${siteId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ name, domain, description, is_active, color_primary, color_secondary, welcome_message })
+                });
+                closeModal('edit-modal');
+                showAlert('Site updated successfully');
+                loadSites();
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        // Delete site
+        async function deleteSite(siteId, siteName) {
+            if (!confirm(`Are you sure you want to delete "${siteName}"? This cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                await api(`/sites/${siteId}`, { method: 'DELETE' });
+                showAlert(`Site "${siteName}" deleted successfully`);
+                loadSites();
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        // Show API key
+        async function showApiKey(siteId) {
+            try {
+                const site = await api(`/sites/${siteId}`);
+                currentSiteId = siteId;
+                document.getElementById('display-api-key').textContent = site.api_key;
+                document.getElementById('apikey-modal').classList.add('active');
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        function copyApiKey() {
+            const apiKey = document.getElementById('display-api-key').textContent;
+            navigator.clipboard.writeText(apiKey).then(() => {
+                showAlert('API key copied to clipboard');
+            });
+        }
+
+        async function regenerateApiKey() {
+            if (!confirm('Are you sure? This will break existing integrations until updated.')) {
+                return;
+            }
+
+            try {
+                const result = await api(`/sites/${currentSiteId}/regenerate-key`, { method: 'POST' });
+                document.getElementById('display-api-key').textContent = result.api_key;
+                showAlert('API key regenerated successfully');
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        // Show embed code
+        async function showEmbedCode(siteId) {
+            try {
+                const site = await api(`/sites/${siteId}`);
+                const serverUrl = window.location.origin;
+
+                const embedCode = `<!-- Chat Support Widget -->
+<script>
+  window.ChatWidgetConfig = { waitForInit: true };
+<` + `/script>
+<script src="${serverUrl}/widget.js"><` + `/script>
+<script>
+  ChatWidget.init({
+    serverUrl: '${serverUrl}',
+    siteApiKey: '${site.api_key}',
+    primaryColor: '${site.color_primary || '#2563eb'}',
+    secondaryColor: '${site.color_secondary || '#1e40af'}'
+  });
+<` + `/script>`;
+
+                document.getElementById('display-embed-code').textContent = embedCode;
+                document.getElementById('embed-modal').classList.add('active');
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        function copyEmbedCode() {
+            const code = document.getElementById('display-embed-code').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                showAlert('Embed code copied to clipboard');
+            });
+        }
+
+        // Utilities
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
+
+        function formatDate(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleDateString();
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Add site button
+            document.getElementById('btn-add-site')?.addEventListener('click', showCreateModal);
+
+            // Modal close buttons
+            document.querySelectorAll('.modal-close').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const modal = this.closest('.modal-overlay');
+                    if (modal) modal.classList.remove('active');
+                });
+            });
+
+            // Create modal buttons
+            document.querySelector('#create-modal .btn-secondary')?.addEventListener('click', () => closeModal('create-modal'));
+            document.querySelector('#create-modal .btn-primary')?.addEventListener('click', createSite);
+
+            // Edit modal buttons
+            document.querySelector('#edit-modal .btn-secondary')?.addEventListener('click', () => closeModal('edit-modal'));
+            document.querySelector('#edit-modal .btn-primary')?.addEventListener('click', updateSite);
+
+            // API key modal button
+            document.querySelector('#apikey-modal .btn-primary')?.addEventListener('click', () => closeModal('apikey-modal'));
+
+            // Embed modal button
+            document.querySelector('#embed-modal .btn-primary')?.addEventListener('click', () => closeModal('embed-modal'));
+
+            // Table action buttons (event delegation)
+            document.getElementById('sites-table')?.addEventListener('click', function (e) {
+                const btn = e.target.closest('button[data-action]');
+                if (!btn) return;
+
+                const action = btn.dataset.action;
+                const siteId = btn.dataset.siteId;
+                const siteName = btn.dataset.siteName;
+
+                if (action === 'edit') {
+                    editSite(siteId);
+                } else if (action === 'apikey') {
+                    showApiKey(siteId);
+                } else if (action === 'embed') {
+                    showEmbedCode(siteId);
+                } else if (action === 'delete') {
+                    deleteSite(siteId, siteName);
+                }
+            });
+
+            console.log('Event listeners setup complete');
+        }
+
+        // Initialize
+        setupEventListeners();
+        checkAuth();
+    </script>
+</body>
+
+</html>

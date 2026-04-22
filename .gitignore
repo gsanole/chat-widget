@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Coverage
+coverage/
+
+# Test output artifacts
+test-results/
+playwright-report/
+tests/integration/test-data-*/
+_*.json
+_*.txt
+results_final.txt
+final_test_output.txt
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local

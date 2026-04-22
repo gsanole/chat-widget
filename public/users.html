@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - Chat Support Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f4f6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            color: #1f2937;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #2563eb;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #b91c1c;
+        }
+
+        .btn-success {
+            background: #16a34a;
+            color: white;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-header h2 {
+            font-size: 18px;
+            color: #1f2937;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 12px 24px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+            font-size: 13px;
+            text-transform: uppercase;
+        }
+
+        td {
+            color: #4b5563;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-super_admin {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-admin {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-admin_support {
+            background: #e0e7ff;
+            color: #4338ca;
+        }
+
+        .badge-support {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .badge-active {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .badge-inactive {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-2fa {
+            background: #ede9fe;
+            color: #5b21b6;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            font-size: 18px;
+            color: #1f2937;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6b7280;
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            border-color: #2563eb;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .nav-bar {
+            background: #1e3a5f;
+            padding: 16px 24px;
+            margin-bottom: 24px;
+        }
+
+        .nav-bar a {
+            color: white;
+            text-decoration: none;
+            margin-right: 24px;
+        }
+
+        .nav-bar a:hover {
+            opacity: 0.8;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card h3 {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            color: #6b7280;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: white;
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="nav-bar">
+        <a href="/admin">← Back to Dashboard</a>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h1>👥 User Management</h1>
+            <button type="button" class="btn btn-primary" id="btn-add-user">+ Add User</button>
+        </div>
+
+        <div id="alert-container"></div>
+
+        <!-- Users Section -->
+        <div id="users-section" class="section active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Users</h3>
+                    <div class="value" id="stat-total">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Super Admins</h3>
+                    <div class="value" id="stat-super">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Admins</h3>
+                    <div class="value" id="stat-admin">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Admin Support</h3>
+                    <div class="value" id="stat-admin-support">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Support Staff</h3>
+                    <div class="value" id="stat-support">0</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>All Users</h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Nickname</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>2FA</th>
+                            <th>Last Login</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table">
+                        <!-- Users will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div class="modal-overlay" id="create-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Create New User</h3>
+                <button type="button" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="new-username" placeholder="Enter username" />
+                </div>
+                <div class="form-group">
+                    <label>Nickname (display name in chat)</label>
+                    <input type="text" id="new-nickname" placeholder="Enter nickname (optional)" />
+                </div>
+                <div class="form-group">
+                    <label>Email (optional)</label>
+                    <input type="email" id="new-email" placeholder="Enter email" />
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="new-password" placeholder="Enter password (min 8 chars)" />
+                </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <select id="new-role">
+                        <option value="support">Support Staff</option>
+                        <option value="admin_support">Admin Support</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary">Cancel</button>
+                <button type="button" class="btn btn-primary">Create User</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div class="modal-overlay" id="edit-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Edit User</h3>
+                <button type="button" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-user-id" />
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="edit-username" disabled />
+                </div>
+                <div class="form-group">
+                    <label>Nickname (display name in chat)</label>
+                    <input type="text" id="edit-nickname" placeholder="Enter nickname" />
+                </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <select id="edit-role">
+                        <option value="support">Support Staff</option>
+                        <option value="admin_support">Admin Support</option>
+                        <option value="admin">Admin</option>
+                        <option value="super_admin">Super Admin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="edit-active">
+                        <option value="true">Active</option>
+                        <option value="false">Inactive</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>New Password (leave blank to keep current)</label>
+                    <input type="password" id="edit-password" placeholder="Enter new password" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary">Cancel</button>
+                <button type="button" class="btn btn-primary">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        let token = localStorage.getItem('adminToken');
+        let currentUser = null;
+
+        // Check authentication
+        async function checkAuth() {
+            if (!token) {
+                window.location.href = '/admin';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/admin/verify`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (!res.ok) {
+                    localStorage.removeItem('adminToken');
+                    window.location.href = '/admin';
+                    return;
+                }
+
+                const data = await res.json();
+                currentUser = data.user;
+
+                if (currentUser.role !== 'super_admin') {
+                    showAlert('Access denied. Super admin privileges required.', 'error');
+                    setTimeout(() => window.location.href = '/admin', 2000);
+                    return;
+                }
+
+                loadUsers();
+            } catch (err) {
+                console.error('Auth check failed:', err);
+                window.location.href = '/admin';
+            }
+        }
+
+        // API helper
+        async function api(endpoint, options = {}) {
+            const res = await fetch(`${API_BASE}${endpoint}`, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    ...options.headers
+                }
+            });
+
+            if (!res.ok) {
+                const error = await res.json();
+                throw new Error(error.error || 'Request failed');
+            }
+
+            return res.json();
+        }
+
+        // Show alert
+        function showAlert(message, type = 'success') {
+            const container = document.getElementById('alert-container');
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+
+        // Load users
+        async function loadUsers() {
+            try {
+                const users = await api('/users');
+                renderUsersTable(users);
+                updateStats(users);
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        function renderUsersTable(users) {
+            const tbody = document.getElementById('users-table');
+            tbody.innerHTML = users.map(user => `
+        <tr>
+          <td><strong>${escapeHtml(user.username)}</strong></td>
+          <td>${escapeHtml(user.nickname || user.username)}</td>
+          <td>${user.email || '-'}</td>
+          <td><span class="badge badge-${user.role}">${user.role}</span></td>
+          <td><span class="badge badge-${user.is_active ? 'active' : 'inactive'}">${user.is_active ? 'Active' : 'Inactive'}</span></td>
+          <td>${user.totp_enabled ? '<span class="badge badge-2fa">Enabled</span>' : '-'}</td>
+          <td>${user.last_login ? formatDate(user.last_login) : 'Never'}</td>
+          <td class="actions">
+            <button class="action-btn btn-secondary" data-action="edit" data-user-id="${user.id}">Edit</button>
+            ${user.id !== currentUser?.id ? `<button class="action-btn btn-danger" data-action="delete" data-user-id="${user.id}" data-username="${escapeHtml(user.username)}">Delete</button>` : ''}
+          </td>
+        </tr>
+      `).join('');
+        }
+
+        function updateStats(users) {
+            document.getElementById('stat-total').textContent = users.length;
+            document.getElementById('stat-super').textContent = users.filter(u => u.role === 'super_admin').length;
+            document.getElementById('stat-admin').textContent = users.filter(u => u.role === 'admin').length;
+            document.getElementById('stat-admin-support').textContent = users.filter(u => u.role === 'admin_support').length;
+            document.getElementById('stat-support').textContent = users.filter(u => u.role === 'support').length;
+        }
+
+        // Create user
+        function showCreateModal() {
+            document.getElementById('new-username').value = '';
+            document.getElementById('new-nickname').value = '';
+            document.getElementById('new-email').value = '';
+            document.getElementById('new-password').value = '';
+            document.getElementById('new-role').value = 'support';
+            document.getElementById('create-modal').classList.add('active');
+        }
+
+        async function createUser() {
+            const username = document.getElementById('new-username').value.trim();
+            const nickname = document.getElementById('new-nickname').value.trim();
+            const email = document.getElementById('new-email').value.trim();
+            const password = document.getElementById('new-password').value;
+            const role = document.getElementById('new-role').value;
+
+            if (!username || !password) {
+                showAlert('Username and password are required', 'error');
+                return;
+            }
+
+            if (password.length < 8) {
+                showAlert('Password must be at least 8 characters', 'error');
+                return;
+            }
+
+            try {
+                await api('/users', {
+                    method: 'POST',
+                    body: JSON.stringify({ username, nickname: nickname || null, email: email || null, password, role })
+                });
+                closeModal('create-modal');
+                showAlert(`User ${username} created successfully`);
+                loadUsers();
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        // Edit user
+        async function editUser(userId) {
+            try {
+                const users = await api('/users');
+                const user = users.find(u => u.id === userId);
+                if (!user) return;
+
+                document.getElementById('edit-user-id').value = userId;
+                document.getElementById('edit-username').value = user.username;
+                document.getElementById('edit-nickname').value = user.nickname || user.username;
+                document.getElementById('edit-role').value = user.role;
+                document.getElementById('edit-active').value = user.is_active ? 'true' : 'false';
+                document.getElementById('edit-password').value = '';
+                document.getElementById('edit-modal').classList.add('active');
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        async function updateUser() {
+            const userId = document.getElementById('edit-user-id').value;
+            const role = document.getElementById('edit-role').value;
+            const isActive = document.getElementById('edit-active').value === 'true';
+            const password = document.getElementById('edit-password').value;
+            const nickname = document.getElementById('edit-nickname').value.trim();
+
+            const body = { role, isActive, nickname };
+            if (password) body.password = password;
+
+            try {
+                await api(`/users/${userId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(body)
+                });
+                closeModal('edit-modal');
+                showAlert('User updated successfully');
+                loadUsers();
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        // Delete user
+        async function deleteUser(userId, username) {
+            if (!confirm(`Are you sure you want to delete user "${username}"? This cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                await api(`/users/${userId}`, { method: 'DELETE' });
+                showAlert(`User ${username} deleted successfully`);
+                loadUsers();
+            } catch (err) {
+                showAlert(err.message, 'error');
+            }
+        }
+
+        // Utilities
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, char => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[char]);
+        }
+
+        function formatDate(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString();
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Add user button
+            document.getElementById('btn-add-user')?.addEventListener('click', showCreateModal);
+
+            // Modal close buttons
+            document.querySelectorAll('.modal-close').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const modal = this.closest('.modal-overlay');
+                    if (modal) modal.classList.remove('active');
+                });
+            });
+
+            // Create modal buttons
+            document.querySelector('#create-modal .btn-secondary')?.addEventListener('click', () => closeModal('create-modal'));
+            document.querySelector('#create-modal .btn-primary')?.addEventListener('click', createUser);
+
+            // Edit modal buttons
+            document.querySelector('#edit-modal .btn-secondary')?.addEventListener('click', () => closeModal('edit-modal'));
+            document.querySelector('#edit-modal .btn-primary')?.addEventListener('click', updateUser);
+
+            // Table action buttons (event delegation)
+            document.getElementById('users-table')?.addEventListener('click', function (e) {
+                const btn = e.target.closest('button[data-action]');
+                if (!btn) return;
+
+                const action = btn.dataset.action;
+                const userId = btn.dataset.userId;
+                const username = btn.dataset.username;
+
+                if (action === 'edit') {
+                    editUser(userId);
+                } else if (action === 'delete') {
+                    deleteUser(userId, username);
+                }
+            });
+
+            console.log('Event listeners setup complete');
+        }
+
+        // Initialize
+        setupEventListeners();
+        checkAuth();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,20 @@
+﻿[
+  {
+    "id": "9cf4bb6e-0bd6-4fe5-860b-74df2e966799",
+    "username": "superadmin",
+    "email": "admin@localhost",
+    "password_hash": "$2b$12$DdlAAa3AuRE6H0FnvrDi7e1.j.pk5/NyaAiUKQL2P3xYMUNw9uxg.",
+    "role": "super_admin",
+    "is_active": 1,
+    "totp_secret": null,
+    "totp_enabled": 0,
+    "recovery_codes": null,
+    "password_reset_token": null,
+    "password_reset_expires": null,
+    "last_login": null,
+    "created_at": 1776578923,
+    "created_by": null,
+    "updated_at": 1776578923,
+    "nickname": "Super Support"
+  }
+]

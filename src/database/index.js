@@ -7,6 +7,12 @@
 
 const fs = require('fs');
 const path = require('path');
+const { runSeed } = require('./seed');
+
+// Seed the data directory from data-seed/ before loading any JsonDB
+// instances. This is a no-op when data files already exist.
+runSeed();
+
 const { JsonDB, DB_DIR } = require('./JsonDB');
 const {
     UserRepository,

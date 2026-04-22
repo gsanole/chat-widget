@@ -11,6 +11,7 @@
   // Configuration - Update this to your server URL
   const CONFIG = {
     serverUrl: externalConfig.serverUrl || window.CHAT_SERVER_URL || window.location.origin,
+    siteId: externalConfig.siteId || null,
     siteApiKey: externalConfig.siteApiKey || null,
     position: externalConfig.position || 'bottom-right',
     primaryColor: externalConfig.primaryColor || '#2563eb',
@@ -866,6 +867,7 @@
           contact: this.customerContact,
           location: this.browserLocation,
           chatHistory: this.messages, // Send bot conversation history
+          siteId: CONFIG.siteId,
           apiKey: CONFIG.siteApiKey
         });
       });

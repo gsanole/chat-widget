@@ -6,6 +6,7 @@
 
 const { sanitizeName, validateLocation } = require('../../middleware/validation');
 const { isCountryBlocked, validateLocationMatch } = require('../../utils/ipUtils');
+const { REQUIRE_SITE_ID } = require('../../config/security');
 const { OUT } = require('../events');
 
 /**
@@ -58,10 +59,20 @@ function createSessionHandlers({
         let site = null;
         if (siteId) {
             site = siteRepository.findById(siteId);
-            if (site && apiKey && site.api_key !== apiKey) {
-                socket.emit(OUT.ERROR, { message: 'Invalid API key' });
+            if (!site) {
+                socket.emit(OUT.ERROR, { message: 'Unknown site' });
+                if (typeof socket.disconnect === 'function') socket.disconnect(true);
                 return;
             }
+            if (site.api_key && site.api_key !== apiKey) {
+                socket.emit(OUT.ERROR, { message: 'Invalid API key' });
+                if (typeof socket.disconnect === 'function') socket.disconnect(true);
+                return;
+            }
+        } else if (REQUIRE_SITE_ID) {
+            socket.emit(OUT.ERROR, { message: 'siteId is required' });
+            if (typeof socket.disconnect === 'function') socket.disconnect(true);
+            return;
         }
 
         const sessionId = generateId();

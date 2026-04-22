@@ -243,7 +243,8 @@ function createUsersRouter({
         let qrCode = null;
         try { qrCode = await totp.generateQRCodeDataURL(otpAuthUrl); } catch (e) { qrCode = otpAuthUrl; }
 
-        res.json({ secret, otpAuthUrl, qrCode });
+        const secretBase32 = typeof secret === 'string' ? secret : totp.encodeBase32(secret);
+        res.json({ secret: secretBase32, otpAuthUrl, qrCode });
     });
 
     router.post('/profile/2fa/enable', requireAuth, (req, res) => {

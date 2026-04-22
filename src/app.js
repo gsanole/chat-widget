@@ -132,6 +132,7 @@ function createApp(options = {}) {
             directives: {
                 defaultSrc: ["'self'"],
                 scriptSrc: ["'self'", "'unsafe-inline'"],
+                scriptSrcAttr: ["'unsafe-inline'"],
                 styleSrc: ["'self'", "'unsafe-inline'"],
                 connectSrc: ["'self'", "wss:", "ws:", "http://ip-api.com"],
                 imgSrc: ["'self'", "data:"],

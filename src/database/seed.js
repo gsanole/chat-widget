@@ -21,17 +21,41 @@ function seedFromDirectory(seedDir, dataDir) {
         fs.mkdirSync(dataDir, { recursive: true });
     }
 
+    // Seed-version handshake: when data-seed/.seed-version differs from
+    // data/.seed-version (or is missing on disk), force a full reseed.
+    // This lets us push corrections (e.g. fixing a bad password hash
+    // on a stale persistent disk) by bumping data-seed/.seed-version.
+    const seedVersionPath = path.join(seedDir, '.seed-version');
+    const dataVersionPath = path.join(dataDir, '.seed-version');
+    let forceReseed = false;
+    let seedVersion = null;
+    if (fs.existsSync(seedVersionPath)) {
+        try {
+            seedVersion = fs.readFileSync(seedVersionPath, 'utf8').trim();
+            const dataVersion = fs.existsSync(dataVersionPath)
+                ? fs.readFileSync(dataVersionPath, 'utf8').trim()
+                : null;
+            if (seedVersion && seedVersion !== dataVersion) {
+                forceReseed = true;
+                console.log(`[seed] version changed (${dataVersion} -> ${seedVersion}); forcing reseed`);
+            }
+        } catch (err) {
+            console.warn('[seed] failed reading .seed-version:', err.message);
+        }
+    }
+
     const entries = fs.readdirSync(seedDir, { withFileTypes: true });
     for (const entry of entries) {
         if (!entry.isFile()) continue;
+        if (entry.name === '.seed-version') continue;
         const src = path.join(seedDir, entry.name);
         const dest = path.join(dataDir, entry.name);
 
-        // If the destination exists, only overwrite when it's unreadable
-        // or unparseable JSON (corrupt). Valid existing data is preserved.
+        // If the destination exists, only overwrite when it's unreadable,
+        // unparseable JSON (corrupt), or a forced reseed is in effect.
         // Special case: users.json with zero users is treated as needing
         // re-seed so the bootstrap admin is always available.
-        if (fs.existsSync(dest)) {
+        if (fs.existsSync(dest) && !forceReseed) {
             let valid = false;
             let needsReseed = false;
             try {
@@ -52,6 +76,16 @@ function seedFromDirectory(seedDir, dataDir) {
             console.log(`[seed] copied ${entry.name} -> ${dest}`);
         } catch (err) {
             console.error(`[seed] failed to copy ${entry.name}:`, err.message);
+        }
+    }
+
+    // Record the seed version we just applied so future boots are no-ops
+    // until the seed version is bumped again.
+    if (seedVersion) {
+        try {
+            fs.writeFileSync(dataVersionPath, seedVersion + '\n');
+        } catch (err) {
+            console.warn('[seed] failed writing .seed-version on data dir:', err.message);
         }
     }
 }

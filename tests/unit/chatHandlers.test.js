@@ -34,11 +34,13 @@ function makeIO() {
     return {
         sockets: { adapter: { rooms } },
         to: jest.fn(function (room) {
-            return {
+            const roomObj = {
                 emit: jest.fn(function (event, data) {
                     broadcasts.push({ room, event, data });
-                })
+                }),
+                except: jest.fn(function (_id) { return roomObj; })
             };
+            return roomObj;
         }),
         broadcasts
     };
@@ -139,6 +141,34 @@ describe('chatHandlers', () => {
 
             expect(lastEmitted(adminSock, OUT.ERROR).data.message).toBe('Session not found');
         });
+
+        test('toLiveMessage handles seconds, ms, missing timestamps and null rows', () => {
+            // Mix of: valid row with seconds ts, valid row with ms ts, row without ts,
+            // and a null entry to exercise the !row branch.
+            msgRepo.findByTicket.mockReturnValue([
+                { id: 'm1', ticket_id: 't', sender_type: 'admin', content: 'a', timestamp: 1700000000 },
+                { id: 'm2', ticket_id: 't', sender: 'customer', message: 'b', timestamp: 1700000000000 },
+                { id: 'm3', ticket_id: 't', message: 'c' },
+                null
+            ]);
+            sessions.set('sess-ts', { socket: makeSocket({ connected: true }) });
+            const adminSock = makeSocket({ isAdmin: true });
+
+            const h = createChatHandlers(deps);
+            h.handleAdminJoin(adminSock, 'sess-ts');
+
+            const history = lastEmitted(adminSock, OUT.CHAT_HISTORY);
+            expect(history).toBeDefined();
+            const msgs = history.data.messages;
+            // First row: seconds -> ms
+            expect(msgs[0].timestamp).toBe(1700000000 * 1000);
+            // Second row: already ms
+            expect(msgs[1].timestamp).toBe(1700000000000);
+            // Third row: missing -> Date.now()
+            expect(typeof msgs[2].timestamp).toBe('number');
+            // Null row passes through as-is
+            expect(msgs[3]).toBeNull();
+        });
     });
 
     // -----------------------------------------------------------------------
@@ -227,8 +257,8 @@ describe('chatHandlers', () => {
 
             expect(msgRepo.create).toHaveBeenCalledTimes(1);
             const saved = msgRepo.create.mock.calls[0][0];
-            expect(saved.sender).toBe('admin');
-            expect(saved.message).toBe('hello world');
+            expect(saved.senderType).toBe('admin');
+            expect(saved.content).toBe('hello world');
 
             expect(ticketRepo.updateLastMessage).toHaveBeenCalledWith('s1');
 

@@ -370,6 +370,8 @@ function createSessionHandlers({
             sessionId,
             updates: { ticketStatus: 'archived', status: 'archived', isArchived: true }
         });
+        // Also notify admins that the active session is gone (test/UI contract)
+        broadcastToAdmins(OUT.SESSION_REMOVED, { sessionId });
         console.log(`Session ${sessionId} archived by admin ${socket.adminUser?.username}`);
     }
 

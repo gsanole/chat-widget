@@ -5,11 +5,15 @@
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 // Set test environment
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-jwt-secret-for-testing-only';
-process.env.DATABASE_DIR = path.join(__dirname, 'test-data');
+// Each test file (worker) gets its own DATABASE_DIR to avoid cross-file
+// races on the shared filesystem (Jest runs files in parallel workers, but
+// they all share the same disk).
+process.env.DATABASE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'chatbot-test-'));
 
 // Test data directory
 const TEST_DATA_DIR = process.env.DATABASE_DIR;
@@ -24,13 +28,11 @@ beforeAll(() => {
 // Clean up test data after all tests
 afterAll(() => {
     // Clean up test data files
-    if (fs.existsSync(TEST_DATA_DIR)) {
-        const files = fs.readdirSync(TEST_DATA_DIR);
-        files.forEach(file => {
-            fs.unlinkSync(path.join(TEST_DATA_DIR, file));
-        });
-        fs.rmdirSync(TEST_DATA_DIR);
-    }
+    try {
+        if (fs.existsSync(TEST_DATA_DIR)) {
+            fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+        }
+    } catch (_) { /* ignore */ }
 });
 
 // Global test utilities

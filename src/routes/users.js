@@ -81,7 +81,7 @@ function createUsersRouter({
         const user = userRepository.findById(userId);
         if (!user) return res.status(404).json({ error: 'User not found' });
         const { role, isActive, nickname, email } = req.body || {};
-        if (role !== undefined && userId === req.user.userId && role !== user.role) {
+        if (role !== undefined && userId === req.user.userId) {
             return res.status(400).json({ error: 'Cannot change your own role' });
         }
         if (isActive === false && userId === req.user.userId) {

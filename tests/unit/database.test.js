@@ -420,13 +420,14 @@ describe('Database Module', () => {
         });
 
         test('should find response for message', () => {
-            // Add a test FAQ
+            // Add a test FAQ with a unique pattern that does not collide with
+            // any seeded FAQ pattern (the seed includes 'hours', 'open', etc.).
             db.chatbot.addFaqItem({
-                patterns: ['hours', 'open'],
+                patterns: ['zzqqfoobarbaz'],
                 response: 'We are open 9-5'
             });
 
-            const response = db.chatbot.findResponse('What are your hours?');
+            const response = db.chatbot.findResponse('please tell me zzqqfoobarbaz now');
             expect(response).toBeDefined();
             expect(response.type).toBe('faq');
             expect(response.message).toBe('We are open 9-5');

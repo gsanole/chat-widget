@@ -15,15 +15,23 @@ const fs = require('fs');
 const os = require('os');
 
 let db;
+const ORIGINAL_DB_DIR = process.env.DATABASE_DIR;
 
 beforeAll(() => {
     process.env.DATABASE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'db-cov-'));
     jest.resetModules();
     db = require('../../src/database');
+    // Remove any seeded chatbot config so the "file missing" test exercises
+    // the default-fallback branch in chatbotConfig.getConfig().
+    try { fs.unlinkSync(path.join(process.env.DATABASE_DIR, 'chatbot.json')); } catch (_) { /* not present is fine */ }
 });
 
 afterAll(() => {
     try { fs.rmSync(process.env.DATABASE_DIR, { recursive: true, force: true }); } catch (e) { }
+    // Restore env so subsequent test files see the original DATABASE_DIR.
+    if (ORIGINAL_DB_DIR === undefined) delete process.env.DATABASE_DIR;
+    else process.env.DATABASE_DIR = ORIGINAL_DB_DIR;
+    jest.resetModules();
 });
 
 describe('chatbot config & FAQ', () => {
@@ -171,12 +179,14 @@ describe('legacy positional adapters', () => {
 
 describe('initializeSuperAdmin & close', () => {
     test('initializeSuperAdmin creates one when absent then no-ops', async () => {
-        // Wipe the users db to ensure clean state
-        const usersFile = path.join(process.env.DATABASE_DIR, 'users.json');
-        fs.writeFileSync(usersFile, '[]');
-        // Force reload by getting a fresh require
+        // Force reload first so runSeed() runs against the temp dir, then wipe
+        // the users file so the absent branch is exercised.
         jest.resetModules();
         const fresh = require('../../src/database');
+        const usersFile = path.join(process.env.DATABASE_DIR, 'users.json');
+        fs.writeFileSync(usersFile, '[]');
+        // Reload _raw cache by reaching into the JsonDB instance
+        fresh._raw.usersDB.data = [];
         const created = await fresh.initializeSuperAdmin();
         expect(created).toBe(true);
         const second = await fresh.initializeSuperAdmin();

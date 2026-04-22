@@ -2037,11 +2037,84 @@
                 } else {
                     container.innerHTML = `
             <p style="color: #6b7280; margin-bottom: 12px;">2FA is not enabled. Enable it for extra security.</p>
-            <button class="btn btn-primary" onclick="window.location.href='/users.html#2fa'">Set up 2FA</button>
+            <button class="btn btn-primary" onclick="setup2FA()">Set up 2FA</button>
+            <div id="2fa-setup-area" style="margin-top: 16px;"></div>
           `;
                 }
             } catch (err) {
                 container.innerHTML = '<p style="color: red;">Failed to load 2FA status</p>';
+            }
+        }
+
+        async function setup2FA() {
+            const area = document.getElementById('2fa-setup-area');
+            area.innerHTML = '<p>Generating secret...</p>';
+            try {
+                const token = localStorage.getItem('adminToken');
+                const res = await fetch('/api/2fa/setup', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    area.innerHTML = `<p style="color: red;">${data.error || 'Setup failed'}</p>`;
+                    return;
+                }
+                const qrImg = data.qrCode && data.qrCode.startsWith('data:')
+                    ? `<img src="${data.qrCode}" alt="QR code" style="max-width:220px;border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#fff;">`
+                    : `<p style="word-break:break-all;font-family:monospace;font-size:12px;">${data.otpAuthUrl || ''}</p>`;
+                area.innerHTML = `
+            <div style="background:#f9fafb;padding:16px;border-radius:8px;border:1px solid #e5e7eb;">
+                <p style="margin-bottom:8px;"><strong>1.</strong> Scan this QR code with your authenticator app (Google Authenticator, Authy, 1Password, etc.):</p>
+                <div style="text-align:center;margin:12px 0;">${qrImg}</div>
+                <p style="margin-bottom:8px;font-size:13px;color:#6b7280;">Or enter this secret manually:</p>
+                <p style="font-family:monospace;background:#fff;padding:8px;border-radius:4px;border:1px solid #e5e7eb;word-break:break-all;">${data.secret}</p>
+                <p style="margin:16px 0 8px;"><strong>2.</strong> Enter the 6-digit code from your app to confirm:</p>
+                <input type="text" id="2fa-confirm-code" maxlength="6" placeholder="123456"
+                    style="padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:16px;letter-spacing:2px;width:140px;">
+                <button class="btn btn-primary" onclick="confirm2FA()" style="margin-left:8px;">Verify &amp; Enable</button>
+                <div id="2fa-confirm-msg" style="margin-top:12px;"></div>
+            </div>
+          `;
+            } catch (err) {
+                area.innerHTML = '<p style="color: red;">Error: ' + (err.message || err) + '</p>';
+            }
+        }
+
+        async function confirm2FA() {
+            const codeInput = document.getElementById('2fa-confirm-code');
+            const msg = document.getElementById('2fa-confirm-msg');
+            const code = (codeInput.value || '').trim();
+            if (!/^\d{6}$/.test(code)) {
+                msg.innerHTML = '<span style="color:red;">Enter a 6-digit code.</span>';
+                return;
+            }
+            msg.innerHTML = 'Verifying...';
+            try {
+                const token = localStorage.getItem('adminToken');
+                const res = await fetch('/api/2fa/enable', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ code })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    msg.innerHTML = `<span style="color:red;">${data.error || 'Verification failed'}</span>`;
+                    return;
+                }
+                const codes = (data.recoveryCodes || []).map(c => `<li style="font-family:monospace;">${c}</li>`).join('');
+                msg.innerHTML = `
+            <div style="background:#fef3c7;border:1px solid #f59e0b;padding:12px;border-radius:6px;color:#92400e;">
+                <strong>✅ 2FA enabled.</strong> Save these recovery codes in a safe place — each can be used once if you lose your device:
+                <ul style="margin:8px 0 0 20px;">${codes}</ul>
+            </div>
+          `;
+                setTimeout(load2FAStatus, 8000);
+            } catch (err) {
+                msg.innerHTML = '<span style="color:red;">Error: ' + (err.message || err) + '</span>';
             }
         }
 

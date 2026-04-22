@@ -1,9 +1,9 @@
-﻿[
+[
   {
     "id": "9cf4bb6e-0bd6-4fe5-860b-74df2e966799",
     "username": "superadmin",
     "email": "admin@localhost",
-    "password_hash": "$2b$12$DdlAAa3AuRE6H0FnvrDi7e1.j.pk5/NyaAiUKQL2P3xYMUNw9uxg.",
+    "password_hash": "$2b$12$nu8uBXBmautwn8KOBoL.Y.r4.Sq/BV/NYkh9xqV0pXRG.G/amRnn.",
     "role": "super_admin",
     "is_active": 1,
     "totp_secret": null,
@@ -12,9 +12,9 @@
     "password_reset_token": null,
     "password_reset_expires": null,
     "last_login": null,
-    "created_at": 1776578923,
+    "created_at": 1776890528,
     "created_by": null,
-    "updated_at": 1776578923,
+    "updated_at": 1776890528,
     "nickname": "Super Support"
   }
 ]

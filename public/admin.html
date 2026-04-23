@@ -1444,17 +1444,18 @@
                 return;
             }
 
+            // Always send username+password+totpCode in a single admin:auth
+            // call. Using admin:submit-2fa separately is fragile because the
+            // server-side `pendingUser` state is lost if the socket reconnects
+            // between requires-2fa and submit-2fa (which happens on mobile,
+            // flaky networks, or after a server redeploy). Sending everything
+            // at once is stateless and works regardless of reconnects.
             if (!socket || !socket.connected) {
                 socket = io();
-
                 socket.on('connect', () => {
                     socket.emit('admin:auth', { username, password, totpCode });
                 });
-
                 setupAuthListeners();
-            } else if (pendingAuth) {
-                // Submit 2FA code
-                socket.emit('admin:submit-2fa', totpCode);
             } else {
                 socket.emit('admin:auth', { username, password, totpCode });
             }

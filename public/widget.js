@@ -967,6 +967,99 @@
       });
     }
 
+    /**
+     * Convert an admin-tz wall-clock time (Y-M-D H:M) into a real UTC Date.
+     * Handles DST automatically by re-formatting the candidate UTC instant
+     * back into the target tz and adjusting by the resulting offset.
+     */
+    _zonedWallTimeToDate(year, monthIndex, day, hour, minute, tz) {
+      try {
+        const utcGuess = Date.UTC(year, monthIndex, day, hour, minute);
+        const fmt = new Intl.DateTimeFormat('en-US', {
+          timeZone: tz, hour12: false,
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        });
+        const parts = fmt.formatToParts(new Date(utcGuess));
+        const get = (t) => parseInt((parts.find(p => p.type === t) || {}).value, 10);
+        const asTz = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'));
+        const diff = asTz - utcGuess;
+        return new Date(utcGuess - diff);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    /**
+     * Find the next opening Date based on the humanHours schedule, then format
+     * it in the customer's local timezone. Returns a friendly sentence or null.
+     */
+    formatNextOpeningLocal(humanHours) {
+      if (!humanHours || humanHours.enabled !== true) return null;
+      const tz = humanHours.timezone || 'UTC';
+      const schedule = humanHours.schedule || {};
+      const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+      const now = new Date();
+      let next = null;
+
+      // Look up to 8 days ahead so we always find something even if the
+      // first match is later today after the current time.
+      for (let i = 0; i < 8 && !next; i++) {
+        // Get the wall-clock Y/M/D in the admin tz for "now + i days".
+        const probe = new Date(now.getTime() + i * 86400000);
+        let y, m, d, dowKey;
+        try {
+          const fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: tz, weekday: 'short',
+            year: 'numeric', month: '2-digit', day: '2-digit'
+          });
+          const parts = fmt.formatToParts(probe);
+          const get = (t) => (parts.find(p => p.type === t) || {}).value;
+          y = parseInt(get('year'), 10);
+          m = parseInt(get('month'), 10);
+          d = parseInt(get('day'), 10);
+          const wd = get('weekday');
+          const map = { Sun: 'sun', Mon: 'mon', Tue: 'tue', Wed: 'wed', Thu: 'thu', Fri: 'fri', Sat: 'sat' };
+          dowKey = map[wd];
+        } catch (e) {
+          return null;
+        }
+        const ranges = schedule[dowKey] || [];
+        for (const r of ranges) {
+          if (!r || typeof r.open !== 'string') continue;
+          const [oh, om] = r.open.split(':').map(n => parseInt(n, 10));
+          if (Number.isNaN(oh) || Number.isNaN(om)) continue;
+          const openDate = this._zonedWallTimeToDate(y, m - 1, d, oh, om, tz);
+          if (openDate && openDate.getTime() > now.getTime()) {
+            next = openDate;
+            break;
+          }
+        }
+      }
+
+      if (!next) return null;
+
+      // Format in the customer's local time.
+      try {
+        const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+        const sameDay = next.toDateString() === now.toDateString();
+        const tomorrow = new Date(now.getTime() + 86400000);
+        const isTomorrow = next.toDateString() === tomorrow.toDateString();
+
+        const timeStr = next.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        let dayLabel;
+        if (sameDay) dayLabel = 'today';
+        else if (isTomorrow) dayLabel = 'tomorrow';
+        else dayLabel = next.toLocaleDateString(undefined, { weekday: 'long' });
+
+        const tzShort = localTz ? ` (${localTz.replace(/_/g, ' ')})` : '';
+        return `We'll be back ${dayLabel} at ${timeStr}${tzShort}, your local time.`;
+      } catch (e) {
+        return null;
+      }
+    }
+
     async sendMessage() {
       const input = document.getElementById('chat-input');
       const message = input.value.trim();
@@ -1019,7 +1112,9 @@
             // Escalation requested but outside business hours.
             // Refresh local config so the quick-reply gets hidden too.
             this.chatbotConfig.humanAvailable = false;
-            this.addBotMessage(data.message);
+            const baseMsg = data.message;
+            const localized = this.formatNextOpeningLocal(this.chatbotConfig.humanHours);
+            this.addBotMessage(localized ? `${baseMsg} ${localized}` : baseMsg);
             this.showQuickReplies();
           } else {
             // Bot response (faq or fallback)

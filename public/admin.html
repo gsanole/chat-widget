@@ -89,6 +89,11 @@
             display: none;
         }
 
+        .login-error.info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
         /* Dashboard */
         .dashboard {
             display: none;
@@ -1476,7 +1481,7 @@
                 pendingAuth = true;
                 totpSection.style.display = 'block';
                 totpInput.focus();
-                showLoginError(data.message || 'Please enter your 2FA code');
+                showLoginInfo(data.message || 'Please enter your 2FA code');
             });
 
             socket.on('admin:auth-failed', (data) => {
@@ -1497,6 +1502,13 @@
 
         function showLoginError(message) {
             loginError.textContent = message;
+            loginError.classList.remove('info');
+            loginError.style.display = 'block';
+        }
+
+        function showLoginInfo(message) {
+            loginError.textContent = message;
+            loginError.classList.add('info');
             loginError.style.display = 'block';
         }
 

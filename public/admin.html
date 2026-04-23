@@ -2384,10 +2384,10 @@
                 locationMatchText = locationCheck.reason || 'Checking...';
             }
 
-            // Get contact info
-            const contact = info.customerContact || session.customerContact;
+            // Get contact info (server sends as `contact`; legacy field name was `customerContact`)
+            const contact = info.contact || info.customerContact || session.contact || session.customerContact;
             const contactDisplay = contact ?
-                `${contact.type === 'phone' ? '📱' : '📧'} ${escapeHtml(contact.value)}` :
+                `${contact.type === 'phone' ? '📱' : '📧'} ${escapeHtml(contact.value || contact.email || contact.phone || '')}` :
                 'Not provided';
 
             infoGrid.innerHTML = `

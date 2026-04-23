@@ -128,12 +128,31 @@ function createSessionHandlers({
             }
         }
 
+        // Normalize contact: support both shapes
+        //   - widget format: { type: 'email'|'phone', value: '...' }
+        //   - legacy format: { email: '...', phone: '...' }
+        let normalizedContact = null;
+        if (contact) {
+            if (contact.type === 'email' && contact.value) {
+                normalizedContact = { type: 'email', value: contact.value, email: contact.value, phone: null };
+            } else if (contact.type === 'phone' && contact.value) {
+                normalizedContact = { type: 'phone', value: contact.value, email: null, phone: contact.value };
+            } else if (contact.email || contact.phone) {
+                normalizedContact = {
+                    type: contact.email ? 'email' : 'phone',
+                    value: contact.email || contact.phone,
+                    email: contact.email || null,
+                    phone: contact.phone || null
+                };
+            }
+        }
+
         const session = {
             sessionId,
             socket,
             name: sanitizedName,
             location: validatedLocation,
-            contact: contact ? { email: contact.email, phone: contact.phone } : null,
+            contact: normalizedContact,
             ip,
             geo: ipAnalysis?.geo,
             ipAnalysis,

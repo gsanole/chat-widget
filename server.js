@@ -38,25 +38,27 @@ const { app, server, io, socketState, sessionCleanup, services, repositories } =
 });
 
 async function startServer() {
+  // Bind the port FIRST so platform health checks (Render, etc.) succeed
+  // immediately. Slow DB init runs in the background.
+  server.listen(PORT, () => {
+    const protocol = HTTPS_ENABLED && httpsOptions ? 'https' : 'http';
+    console.log('===========================================');
+    console.log('  Chat Support Server Running');
+    console.log('===========================================');
+    console.log('  URL: ' + protocol + '://localhost:' + PORT);
+    console.log('  Admin Panel: ' + protocol + '://localhost:' + PORT + '/admin');
+    console.log('  Protocol: ' + protocol.toUpperCase());
+    console.log('  Environment: ' + (process.env.NODE_ENV || 'development'));
+    console.log('===========================================');
+  });
+
   try {
     const created = await db.initializeSuperAdmin();
-    server.listen(PORT, () => {
-      const protocol = HTTPS_ENABLED && httpsOptions ? 'https' : 'http';
-      console.log('===========================================');
-      console.log('  Chat Support Server Running');
-      console.log('===========================================');
-      console.log('  URL: ' + protocol + '://localhost:' + PORT);
-      console.log('  Admin Panel: ' + protocol + '://localhost:' + PORT + '/admin');
-      console.log('  Protocol: ' + protocol.toUpperCase());
-      console.log('  Environment: ' + (process.env.NODE_ENV || 'development'));
-      if (created) {
-        console.log('DEFAULT SUPER ADMIN CREATED - Username: superadmin / Password: changeme123!');
-      }
-      console.log('===========================================');
-    });
+    if (created) {
+      console.log('DEFAULT SUPER ADMIN CREATED - Username: superadmin / Password: changeme123!');
+    }
   } catch (err) {
-    console.error('Failed to start server:', err);
-    process.exit(1);
+    console.error('Failed to initialize super admin:', err);
   }
 }
 

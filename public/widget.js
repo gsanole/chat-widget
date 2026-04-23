@@ -40,7 +40,13 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: transform 0.2s, box-shadow 0.2s;
+      transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+    }
+
+    #chat-widget-container.chat-open #chat-widget-button {
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(0.85);
     }
 
     #chat-widget-button:hover {
@@ -781,12 +787,16 @@
     open() {
       this.isOpen = true;
       document.getElementById('chat-widget-window').classList.add('open');
+      const c = document.getElementById('chat-widget-container');
+      if (c) c.classList.add('chat-open');
       this.saveState();
     }
 
     close() {
       this.isOpen = false;
       document.getElementById('chat-widget-window').classList.remove('open');
+      const c = document.getElementById('chat-widget-container');
+      if (c) c.classList.remove('chat-open');
       this.saveState();
     }
 

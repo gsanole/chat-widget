@@ -466,6 +466,12 @@
                     <label>Secondary Color</label>
                     <input type="color" id="new-color-secondary" value="#1e40af" />
                 </div>
+                <div class="form-group">
+                    <label>Allowed Origins (one per line, leave blank to allow any)</label>
+                    <textarea id="new-allowed-origins" placeholder="https://example.com"></textarea>
+                    <small style="color:#6b7280;">Restricts which websites this API key can be used from. Strongly
+                        recommended.</small>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary">Cancel</button>
@@ -513,6 +519,12 @@
                 <div class="form-group">
                     <label>Custom Welcome Message (leave blank for default)</label>
                     <textarea id="edit-welcome-message" placeholder="Hi! How can we help you today?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Allowed Origins (one per line, leave blank to allow any)</label>
+                    <textarea id="edit-allowed-origins" placeholder="https://example.com"></textarea>
+                    <small style="color:#6b7280;">Restricts which websites this API key can be used from. Strongly
+                        recommended.</small>
                 </div>
             </div>
             <div class="modal-footer">
@@ -694,7 +706,16 @@
             document.getElementById('new-description').value = '';
             document.getElementById('new-color-primary').value = '#2563eb';
             document.getElementById('new-color-secondary').value = '#1e40af';
+            const ao = document.getElementById('new-allowed-origins');
+            if (ao) ao.value = '';
             document.getElementById('create-modal').classList.add('active');
+        }
+
+        // Helper: convert textarea contents to array (or null) for allowed_origins
+        function parseOriginsInput(value) {
+            if (!value) return null;
+            const arr = String(value).split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+            return arr.length ? arr : null;
         }
 
         async function createSite() {
@@ -703,6 +724,7 @@
             const description = document.getElementById('new-description').value.trim();
             const color_primary = document.getElementById('new-color-primary').value;
             const color_secondary = document.getElementById('new-color-secondary').value;
+            const allowed_origins = parseOriginsInput(document.getElementById('new-allowed-origins')?.value);
 
             if (!name || !domain) {
                 showAlert('Name and domain are required', 'error');
@@ -712,7 +734,7 @@
             try {
                 const site = await api('/sites', {
                     method: 'POST',
-                    body: JSON.stringify({ name, domain, description, color_primary, color_secondary })
+                    body: JSON.stringify({ name, domain, description, color_primary, color_secondary, allowed_origins })
                 });
                 closeModal('create-modal');
                 showAlert(`Site "${name}" created successfully!`);
@@ -740,6 +762,8 @@
                 document.getElementById('edit-color-primary').value = site.color_primary || '#2563eb';
                 document.getElementById('edit-color-secondary').value = site.color_secondary || '#1e40af';
                 document.getElementById('edit-welcome-message').value = site.welcome_message || '';
+                const aoEl = document.getElementById('edit-allowed-origins');
+                if (aoEl) aoEl.value = Array.isArray(site.allowed_origins) ? site.allowed_origins.join('\n') : '';
                 document.getElementById('edit-modal').classList.add('active');
             } catch (err) {
                 showAlert(err.message, 'error');
@@ -755,11 +779,12 @@
             const color_primary = document.getElementById('edit-color-primary').value;
             const color_secondary = document.getElementById('edit-color-secondary').value;
             const welcome_message = document.getElementById('edit-welcome-message').value.trim() || null;
+            const allowed_origins = parseOriginsInput(document.getElementById('edit-allowed-origins')?.value);
 
             try {
                 await api(`/sites/${siteId}`, {
                     method: 'PUT',
-                    body: JSON.stringify({ name, domain, description, is_active, color_primary, color_secondary, welcome_message })
+                    body: JSON.stringify({ name, domain, description, is_active, color_primary, color_secondary, welcome_message, allowed_origins })
                 });
                 closeModal('edit-modal');
                 showAlert('Site updated successfully');

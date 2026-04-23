@@ -6,6 +6,7 @@
 
 const { sanitizeName, validateLocation } = require('../../middleware/validation');
 const { isCountryBlocked, validateLocationMatch } = require('../../utils/ipUtils');
+const { isOriginAllowed } = require('../../utils/siteSecurity');
 const { REQUIRE_SITE_ID } = require('../../config/security');
 const { OUT } = require('../events');
 
@@ -66,6 +67,15 @@ function createSessionHandlers({
             }
             if (site.api_key && site.api_key !== apiKey) {
                 socket.emit(OUT.ERROR, { message: 'Invalid API key' });
+                if (typeof socket.disconnect === 'function') socket.disconnect(true);
+                return;
+            }
+            // Per-site origin allow-list (skipped if site has none configured)
+            const originHeader = socket.handshake?.headers?.origin
+                || socket.handshake?.headers?.referer
+                || '';
+            if (!isOriginAllowed(site, originHeader)) {
+                socket.emit(OUT.ERROR, { message: 'Origin not allowed for this site' });
                 if (typeof socket.disconnect === 'function') socket.disconnect(true);
                 return;
             }

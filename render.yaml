@@ -5,8 +5,8 @@ services:
   - type: web
     name: customer-chat
     runtime: node
-    plan: starter            # $7/mo, always-on. Free plan sleeps and breaks Socket.IO.
-    region: oregon           # change if you prefer fra / singapore / etc.
+    plan: starter # $7/mo, always-on. Free plan sleeps and breaks Socket.IO.
+    region: oregon # change if you prefer fra / singapore / etc.
     branch: main
     buildCommand: npm ci
     startCommand: node server.js
@@ -26,6 +26,6 @@ services:
       - key: TRUST_PROXY
         value: "1"
       - key: JWT_SECRET
-        generateValue: true   # Render generates a strong random value once.
+        generateValue: true # Render generates a strong random value once.
       - key: ALLOWED_ORIGINS
-        sync: false           # set in dashboard, e.g. https://yoursite.com,https://www.yoursite.com
+        sync: false # set in dashboard, e.g. https://yoursite.com,https://www.yoursite.com

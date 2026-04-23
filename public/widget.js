@@ -714,10 +714,13 @@
       this.showTyping();
 
       try {
-        const response = await fetch(CONFIG.serverUrl + '/api/chatbot/message', {
+        const url = CONFIG.siteApiKey
+          ? CONFIG.serverUrl + '/api/chatbot/message?siteApiKey=' + encodeURIComponent(CONFIG.siteApiKey)
+          : CONFIG.serverUrl + '/api/chatbot/message';
+        const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message })
+          body: JSON.stringify({ message, siteApiKey: CONFIG.siteApiKey || undefined })
         });
 
         if (response.ok) {

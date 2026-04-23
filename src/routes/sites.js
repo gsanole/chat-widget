@@ -18,6 +18,19 @@ function createSitesRouter({ siteRepository, ticketRepository, auditRepository, 
     const router = express.Router();
     const { requireAuth, requirePermission } = authMiddleware;
 
+    // Normalize allowed_origins input: accepts array or comma/newline-separated string.
+    // Returns null (= allow all) if empty/falsy, else array of trimmed lowercase origins.
+    function normalizeOrigins(input) {
+        if (input == null || input === '') return null;
+        const list = Array.isArray(input)
+            ? input
+            : String(input).split(/[,\n]/);
+        const cleaned = list
+            .map(s => String(s).trim().toLowerCase())
+            .filter(Boolean);
+        return cleaned.length ? cleaned : null;
+    }
+
     // Helper for audit logging
     function auditLog(req, action, resourceType = null, resourceId = null, details = null) {
         const ip = req.ip || req.socket?.remoteAddress;
@@ -67,7 +80,7 @@ function createSitesRouter({ siteRepository, ticketRepository, auditRepository, 
 
     // Create site
     router.post('/', requireAuth, requirePermission('settings'), (req, res) => {
-        const { name, domain, description } = req.body;
+        const { name, domain, description, allowed_origins } = req.body;
 
         if (!name || !domain) {
             return res.status(400).json({ error: 'Name and domain are required' });
@@ -79,7 +92,12 @@ function createSitesRouter({ siteRepository, ticketRepository, auditRepository, 
             return res.status(400).json({ error: 'Domain already registered' });
         }
 
-        const site = siteRepository.create({ name, domain, description });
+        const site = siteRepository.create({
+            name,
+            domain,
+            description,
+            allowed_origins: normalizeOrigins(allowed_origins)
+        });
         auditLog(req, 'SITE_CREATED', 'site', site.id, { name, domain });
 
         res.status(201).json({ success: true, site, ...site });
@@ -87,7 +105,7 @@ function createSitesRouter({ siteRepository, ticketRepository, auditRepository, 
 
     // Update site (PUT alias for PATCH)
     const updateSiteHandler = (req, res) => {
-        const { name, domain, description, is_active, color_primary, color_secondary, welcome_message } = req.body;
+        const { name, domain, description, is_active, color_primary, color_secondary, welcome_message, allowed_origins } = req.body;
         const site = siteRepository.findById(req.params.id);
         if (!site) return res.status(404).json({ error: 'Site not found' });
         if (domain && domain !== site.domain) {
@@ -102,6 +120,7 @@ function createSitesRouter({ siteRepository, ticketRepository, auditRepository, 
         if (color_primary !== undefined) updates.color_primary = color_primary;
         if (color_secondary !== undefined) updates.color_secondary = color_secondary;
         if (welcome_message !== undefined) updates.welcome_message = welcome_message;
+        if (allowed_origins !== undefined) updates.allowed_origins = normalizeOrigins(allowed_origins);
         const updated = siteRepository.update(req.params.id, updates);
         auditLog(req, 'SITE_UPDATED', 'site', req.params.id, updates);
         res.json({ success: true, site: updated, ...(updated || {}) });
@@ -116,7 +135,7 @@ function createSitesRouter({ siteRepository, ticketRepository, auditRepository, 
 
     // Update site
     router.patch('/:id', requireAuth, requirePermission('settings'), (req, res) => {
-        const { name, domain, description, is_active, color_primary, color_secondary, welcome_message } = req.body;
+        const { name, domain, description, is_active, color_primary, color_secondary, welcome_message, allowed_origins } = req.body;
 
         const site = siteRepository.findById(req.params.id);
         if (!site) {
@@ -139,6 +158,7 @@ function createSitesRouter({ siteRepository, ticketRepository, auditRepository, 
         if (color_primary !== undefined) updates.color_primary = color_primary;
         if (color_secondary !== undefined) updates.color_secondary = color_secondary;
         if (welcome_message !== undefined) updates.welcome_message = welcome_message;
+        if (allowed_origins !== undefined) updates.allowed_origins = normalizeOrigins(allowed_origins);
 
         const updated = siteRepository.update(req.params.id, updates);
         auditLog(req, 'SITE_UPDATED', 'site', req.params.id, updates);

@@ -21,7 +21,7 @@ class SiteRepository extends BaseRepository {
      * @param {Object} siteData
      * @returns {Object}
      */
-    create({ name, domain, description = '' }) {
+    create({ name, domain, description = '', allowed_origins = null }) {
         const site = {
             id: generateId(),
             name,
@@ -33,6 +33,7 @@ class SiteRepository extends BaseRepository {
             color_primary: '#2563eb',
             color_secondary: '#1e40af',
             welcome_message: null,
+            allowed_origins: Array.isArray(allowed_origins) ? allowed_origins : null,
             created_at: now(),
             updated_at: now()
         };

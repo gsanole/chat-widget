@@ -6,6 +6,7 @@
 
 const express = require('express');
 const ipUtils = require('../utils/ipUtils');
+const { isOriginAllowed, SiteRateLimiter } = require('../utils/siteSecurity');
 
 /**
  * Create chatbot router
@@ -13,11 +14,49 @@ const ipUtils = require('../utils/ipUtils');
  * @param {Object} deps.chatbotService - Chatbot service
  * @param {Object} deps.auditRepository - Audit repository
  * @param {Object} deps.authMiddleware - Auth middleware
+ * @param {Object} [deps.siteRepository] - Site repository (enables per-site origin/rate enforcement)
  * @returns {Router}
  */
-function createChatbotRouter({ chatbotService, auditRepository, authMiddleware }) {
+function createChatbotRouter({ chatbotService, auditRepository, authMiddleware, siteRepository }) {
     const router = express.Router();
     const { requireAuth, requirePermission } = authMiddleware;
+
+    // Per-site rate limiter for public widget endpoints (default 30 req/min/site).
+    const siteLimiter = new SiteRateLimiter({ max: 30, windowMs: 60 * 1000 });
+
+    /**
+     * Resolve site from request (?siteApiKey=... or x-site-api-key header or body.siteApiKey)
+     * and enforce origin + per-site rate limit.
+     * Returns true if request should proceed, false if it has been rejected.
+     */
+    function enforceSiteSecurity(req, res) {
+        if (!siteRepository) return true;
+        const apiKey = (req.query && req.query.siteApiKey)
+            || req.headers['x-site-api-key']
+            || (req.body && req.body.siteApiKey)
+            || null;
+        if (!apiKey) return true; // anonymous widget calls remain allowed (back-compat)
+
+        const site = siteRepository.findByApiKey(apiKey);
+        if (!site) {
+            res.status(401).json({ error: 'Invalid site API key' });
+            return false;
+        }
+
+        const originHeader = req.headers.origin || req.headers.referer || '';
+        if (!isOriginAllowed(site, originHeader)) {
+            res.status(403).json({ error: 'Origin not allowed for this site' });
+            return false;
+        }
+
+        if (!siteLimiter.check(site.api_key)) {
+            res.status(429).json({ error: 'Too many requests for this site, slow down.' });
+            return false;
+        }
+
+        req.site = site;
+        return true;
+    }
 
     // Helper for audit logging
     function auditLog(req, action, resourceType = null, resourceId = null, details = null) {
@@ -37,6 +76,7 @@ function createChatbotRouter({ chatbotService, auditRepository, authMiddleware }
 
     // Get chatbot configuration (public; returns sanitized public fields)
     router.get('/config', (req, res) => {
+        if (!enforceSiteSecurity(req, res)) return;
         const config = chatbotService.getConfig() || {};
         res.json({
             botName: config.botName || config.name || 'Assistant',
@@ -48,6 +88,7 @@ function createChatbotRouter({ chatbotService, auditRepository, authMiddleware }
 
     // Public chatbot message endpoint (used by widget)
     router.post('/message', async (req, res) => {
+        if (!enforceSiteSecurity(req, res)) return;
         const { message, siteConfig } = req.body || {};
         if (!message || typeof message !== 'string' || !message.trim()) {
             return res.status(400).json({ error: 'Message is required' });

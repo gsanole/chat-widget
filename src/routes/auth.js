@@ -78,7 +78,11 @@ function createAuthRouter({
                 if (!totp.verifyTOTP(user.totp_secret, totpCode)) {
                     // Check recovery codes
                     if (user.recovery_codes) {
-                        const codes = JSON.parse(user.recovery_codes);
+                        const codes = Array.isArray(user.recovery_codes)
+                            ? [...user.recovery_codes]
+                            : (typeof user.recovery_codes === 'string'
+                                ? JSON.parse(user.recovery_codes)
+                                : []);
                         const result = totp.verifyRecoveryCode(codes, totpCode);
                         if (result.valid) {
                             userRepository.enableTotp(user.id, result.remainingCodes);

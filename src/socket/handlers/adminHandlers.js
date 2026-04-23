@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Admin Socket Handlers
  * 
  * Single Responsibility: Admin authentication and commands via Socket.IO
@@ -125,7 +125,13 @@ function createAdminHandlers({
                 if (!totp.verifyTOTP(user.totp_secret, totpCode)) {
                     let validRecovery = false;
                     if (user.recovery_codes) {
-                        const codes = JSON.parse(user.recovery_codes);
+                        // recovery_codes may be stored as a JSON string OR
+                        // (when written via JsonDB) already as an array. Be tolerant.
+                        const codes = Array.isArray(user.recovery_codes)
+                            ? [...user.recovery_codes]
+                            : (typeof user.recovery_codes === 'string'
+                                ? JSON.parse(user.recovery_codes)
+                                : []);
                         const result = totp.verifyRecoveryCode(codes, totpCode);
                         if (result.valid) {
                             userRepository.enableTotp(user.id, result.remainingCodes);
@@ -173,7 +179,11 @@ function createAdminHandlers({
         if (!totp.verifyTOTP(user.totp_secret, totpCode)) {
             let validRecovery = false;
             if (user.recovery_codes) {
-                const codes = JSON.parse(user.recovery_codes);
+                const codes = Array.isArray(user.recovery_codes)
+                    ? [...user.recovery_codes]
+                    : (typeof user.recovery_codes === 'string'
+                        ? JSON.parse(user.recovery_codes)
+                        : []);
                 const result = totp.verifyRecoveryCode(codes, totpCode);
                 if (result.valid) {
                     userRepository.enableTotp(user.id, result.remainingCodes);

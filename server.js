@@ -40,7 +40,7 @@ const { app, server, io, socketState, sessionCleanup, services, repositories } =
 async function startServer() {
   // Bind the port FIRST so platform health checks (Render, etc.) succeed
   // immediately. Slow DB init runs in the background.
-  server.listen(PORT, () => {
+  if (!server.listening) server.listen(PORT, () => {
     const protocol = HTTPS_ENABLED && httpsOptions ? 'https' : 'http';
     console.log('===========================================');
     console.log('  Chat Support Server Running');

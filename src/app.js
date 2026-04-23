@@ -153,6 +153,27 @@ function createApp(options = {}) {
     app.use('/api/admin/login', createAuthLimiter());
     app.use('/api/admin/auth', createAuthLimiter());
 
+    // Redirect *.html requests to extension-less URLs (301 permanent).
+    // Runs before express.static so the .html versions are never served directly.
+    app.get(/^\/(.+)\.html$/, (req, res) => {
+        const cleanPath = '/' + req.params[0];
+        const qIdx = req.originalUrl.indexOf('?');
+        const qs = qIdx === -1 ? '' : req.originalUrl.slice(qIdx);
+        return res.redirect(301, cleanPath + qs);
+    });
+
+    // Clean-URL handlers for the public pages (no .html extension in URLs).
+    // /admin is intentionally NOT handled here — it has its own explicit
+    // handler later that supports both public/admin.html and public/admin/index.html.
+    const cleanPages = ['demo', 'sites', 'users'];
+    cleanPages.forEach(name => {
+        app.get('/' + name, (req, res, next) => {
+            const fp = path.join(__dirname, '../public', name + '.html');
+            if (fs.existsSync(fp)) return res.sendFile(fp);
+            next();
+        });
+    });
+
     // Static files
     app.use(express.static(path.join(__dirname, '../public')));
     app.use('/admin', express.static(path.join(__dirname, '../public/admin')));
@@ -396,10 +417,10 @@ function createApp(options = {}) {
   <h1>Chat Support</h1>
   <p>Server is running. Available pages:</p>
   <ul>
-    <li><a href="/demo.html">/demo.html</a> &mdash; customer chat widget demo</li>
+    <li><a href="/demo">/demo</a> &mdash; customer chat widget demo</li>
     <li><a href="/admin">/admin</a> &mdash; admin dashboard</li>
-    <li><a href="/sites.html">/sites.html</a> &mdash; sites management</li>
-    <li><a href="/users.html">/users.html</a> &mdash; users management</li>
+    <li><a href="/sites">/sites</a> &mdash; sites management</li>
+    <li><a href="/users">/users</a> &mdash; users management</li>
     <li><code>/widget.js</code> &mdash; embeddable widget script</li>
   </ul>
 </body>

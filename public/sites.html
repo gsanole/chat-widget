@@ -532,8 +532,11 @@
             <div class="modal-body">
                 <p style="margin-bottom: 16px; color: #6b7280;">Use this API key in your chat widget to connect this
                     site to the support system.</p>
-                <div class="api-key-display" id="display-api-key"></div>
-                <button class="copy-btn" onclick="copyApiKey()">Copy API Key</button>
+                <div class="api-key-display" id="display-api-key" data-key="" data-revealed="false"></div>
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button class="copy-btn" onclick="copyApiKey()">Copy API Key</button>
+                    <button class="copy-btn" id="toggle-api-key-btn" onclick="toggleApiKeyVisibility()">Show</button>
+                </div>
                 <div style="margin-top: 24px;">
                     <button class="btn btn-warning" onclick="regenerateApiKey()">Regenerate API Key</button>
                     <p style="margin-top: 8px; font-size: 12px; color: #dc2626;">Warning: Regenerating will break
@@ -717,7 +720,7 @@
 
                 // Show the API key modal
                 currentSiteId = site.id;
-                document.getElementById('display-api-key').textContent = site.api_key;
+                setApiKeyDisplay(site.api_key);
                 document.getElementById('apikey-modal').classList.add('active');
             } catch (err) {
                 showAlert(err.message, 'error');
@@ -781,12 +784,43 @@
             }
         }
 
+        // Mask API key for display (show first 4 + last 4 chars, mask the middle)
+        function maskApiKey(key) {
+            if (!key) return '';
+            if (key.length <= 8) return '•'.repeat(key.length);
+            return key.slice(0, 4) + '•'.repeat(Math.max(8, key.length - 8)) + key.slice(-4);
+        }
+
+        function setApiKeyDisplay(key) {
+            const el = document.getElementById('display-api-key');
+            el.dataset.key = key || '';
+            el.dataset.revealed = 'false';
+            el.textContent = maskApiKey(key);
+            const btn = document.getElementById('toggle-api-key-btn');
+            if (btn) btn.textContent = 'Show';
+        }
+
+        function toggleApiKeyVisibility() {
+            const el = document.getElementById('display-api-key');
+            const btn = document.getElementById('toggle-api-key-btn');
+            const revealed = el.dataset.revealed === 'true';
+            if (revealed) {
+                el.textContent = maskApiKey(el.dataset.key);
+                el.dataset.revealed = 'false';
+                if (btn) btn.textContent = 'Show';
+            } else {
+                el.textContent = el.dataset.key;
+                el.dataset.revealed = 'true';
+                if (btn) btn.textContent = 'Hide';
+            }
+        }
+
         // Show API key
         async function showApiKey(siteId) {
             try {
                 const site = await api(`/sites/${siteId}`);
                 currentSiteId = siteId;
-                document.getElementById('display-api-key').textContent = site.api_key;
+                setApiKeyDisplay(site.api_key);
                 document.getElementById('apikey-modal').classList.add('active');
             } catch (err) {
                 showAlert(err.message, 'error');
@@ -794,7 +828,7 @@
         }
 
         function copyApiKey() {
-            const apiKey = document.getElementById('display-api-key').textContent;
+            const apiKey = document.getElementById('display-api-key').dataset.key;
             navigator.clipboard.writeText(apiKey).then(() => {
                 showAlert('API key copied to clipboard');
             });
@@ -807,7 +841,7 @@
 
             try {
                 const result = await api(`/sites/${currentSiteId}/regenerate-key`, { method: 'POST' });
-                document.getElementById('display-api-key').textContent = result.api_key;
+                setApiKeyDisplay(result.api_key);
                 showAlert('API key regenerated successfully');
             } catch (err) {
                 showAlert(err.message, 'error');

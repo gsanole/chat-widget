@@ -143,7 +143,16 @@ class UserRepository extends BaseRepository {
      * @returns {Object|null}
      */
     setTotpSecret(userId, secret) {
-        return this.db.update(u => u.id === userId, { totp_secret: secret });
+        // Always persist as a base32 string. Storing a raw Buffer would
+        // JSON-serialize as { type: 'Buffer', data: [...] } and fail to
+        // verify after the next process restart.
+        let stored = secret;
+        if (Buffer.isBuffer(secret)) {
+            stored = require('../../utils/totp').encodeBase32(secret);
+        } else if (secret && typeof secret === 'object' && Array.isArray(secret.data)) {
+            stored = require('../../utils/totp').encodeBase32(Buffer.from(secret.data));
+        }
+        return this.db.update(u => u.id === userId, { totp_secret: stored });
     }
 
     /**

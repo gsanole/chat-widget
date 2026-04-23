@@ -73,11 +73,35 @@ function decodeBase32(encoded) {
 }
 
 /**
+ * Normalize a stored TOTP secret into a Buffer, regardless of how it was
+ * persisted. Handles:
+ *   - Buffer (fresh in-memory after setup)
+ *   - base32 string (preferred persistent form)
+ *   - Plain object {type:'Buffer', data:[...]} (legacy: how Node Buffers
+ *     JSON-serialize when stored directly in JsonDB)
+ *   - Array of bytes
+ * Returns null on anything unparseable.
+ */
+function normalizeSecret(secret) {
+  if (!secret) return null;
+  if (Buffer.isBuffer(secret)) return secret;
+  if (typeof secret === 'string') {
+    const buf = decodeBase32(secret);
+    return buf && buf.length ? buf : null;
+  }
+  if (Array.isArray(secret)) return Buffer.from(secret);
+  if (typeof secret === 'object' && Array.isArray(secret.data)) {
+    return Buffer.from(secret.data);
+  }
+  return null;
+}
+
+/**
  * Generate TOTP code for a given secret and time
  */
 function generateTOTP(secret, time = null) {
   if (!secret) return '';
-  const secretBuffer = typeof secret === 'string' ? decodeBase32(secret) : secret;
+  const secretBuffer = normalizeSecret(secret);
   if (!secretBuffer || secretBuffer.length === 0) return '';
   let counter = Math.floor((time || Date.now() / 1000) / TOTP_CONFIG.period);
 
@@ -128,7 +152,13 @@ function verifyTOTP(secret, code, window = 2) {
  * Generate TOTP URI for QR code (otpauth:// format)
  */
 function generateTOTPUri(secret, accountName, issuer = 'ChatSupport') {
-  const secretBase32 = typeof secret === 'string' ? secret : encodeBase32(secret);
+  let secretBase32;
+  if (typeof secret === 'string') secretBase32 = secret;
+  else if (Buffer.isBuffer(secret)) secretBase32 = encodeBase32(secret);
+  else {
+    const buf = normalizeSecret(secret);
+    secretBase32 = buf ? encodeBase32(buf) : '';
+  }
   const encodedIssuer = encodeURIComponent(issuer);
   const encodedAccount = encodeURIComponent(accountName);
 
@@ -193,6 +223,7 @@ module.exports = {
   generateSecret,
   encodeBase32,
   decodeBase32,
+  normalizeSecret,
   generateTOTP,
   verifyTOTP,
   generateTOTPUri,

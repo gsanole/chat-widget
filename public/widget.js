@@ -494,6 +494,11 @@
     </div>
   `;
 
+  // Session persistence: per-site key in sessionStorage
+  // (sessionStorage persists across page navigations in the same tab,
+  //  clears when the tab closes — exactly the right scope for a chat session)
+  const STORAGE_KEY_PREFIX = 'chatWidgetSession_v1::';
+
   // Chat Widget Class
   class ChatWidget {
     constructor() {
@@ -504,9 +509,12 @@
       this.sessionId = null;
       this.browserLocation = null;
       this.customerName = 'Visitor';
+      this.customerContact = null;
       this.messages = [];
       this.chatbotConfig = null;
       this.escalationPending = false;
+      this.endedByAdmin = false;
+      this.chatStarted = false;
     }
 
     async init() {
@@ -515,7 +523,175 @@
       this.bindEvents();
       this.loadSocketIO();
       await this.loadChatbotConfig();
+      // Restore prior session (if same tab navigated/reloaded)
+      this.restoreState();
     }
+
+    // ---- Session persistence ----
+    storageKey() {
+      return STORAGE_KEY_PREFIX + (CONFIG.siteApiKey || 'default');
+    }
+
+    saveState() {
+      try {
+        if (typeof sessionStorage === 'undefined') return;
+        const state = {
+          messages: this.messages,
+          customerName: this.customerName,
+          customerContact: this.customerContact || null,
+          browserLocation: this.browserLocation || null,
+          isBotMode: this.isBotMode,
+          isConnected: this.isConnected,
+          escalationPending: !!this.escalationPending,
+          endedByAdmin: !!this.endedByAdmin,
+          isOpen: this.isOpen,
+          chatStarted: !!this.chatStarted,
+          sessionId: this.sessionId || null
+        };
+        sessionStorage.setItem(this.storageKey(), JSON.stringify(state));
+      } catch (e) { /* ignore quota / disabled storage */ }
+    }
+
+    loadState() {
+      try {
+        if (typeof sessionStorage === 'undefined') return null;
+        const raw = sessionStorage.getItem(this.storageKey());
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (e) { return null; }
+    }
+
+    clearState() {
+      try {
+        if (typeof sessionStorage === 'undefined') return;
+        sessionStorage.removeItem(this.storageKey());
+      } catch (e) { /* ignore */ }
+    }
+
+    restoreState() {
+      const state = this.loadState();
+      if (!state || !state.chatStarted) return;
+
+      this.messages = Array.isArray(state.messages) ? state.messages : [];
+      this.customerName = state.customerName || 'Visitor';
+      this.customerContact = state.customerContact || null;
+      this.browserLocation = state.browserLocation || null;
+      this.isBotMode = state.isBotMode !== false;
+      this.escalationPending = !!state.escalationPending;
+      this.endedByAdmin = !!state.endedByAdmin;
+      this.chatStarted = true;
+      this.isConnected = false; // socket needs to reconnect
+
+      // Skip the pre-chat form, show the chat area
+      const preChatForm = document.getElementById('pre-chat-form');
+      if (preChatForm) preChatForm.style.display = 'none';
+      const chatArea = document.getElementById('chat-area');
+      if (chatArea) chatArea.classList.add('active');
+
+      this.updateChatStatus(this.isBotMode ? 'bot' : 'human');
+      this.replayMessages();
+
+      if (this.isBotMode) {
+        this.showQuickReplies();
+      } else {
+        const qr = document.getElementById('quick-replies');
+        if (qr) qr.style.display = 'none';
+      }
+
+      // If they were in a live agent chat (and not ended), silently reconnect
+      if (!this.isBotMode && !this.endedByAdmin) {
+        this.reconnectHumanSession();
+      }
+
+      if (this.endedByAdmin) {
+        const input = document.getElementById('chat-input');
+        if (input) {
+          input.disabled = true;
+          input.placeholder = 'Conversation ended';
+        }
+      }
+
+      if (state.isOpen) this.open();
+    }
+
+    replayMessages() {
+      const container = document.getElementById('chat-messages');
+      if (!container) return;
+      container.innerHTML = '';
+      const botName = this.chatbotConfig?.botName || 'Support Bot';
+      for (const m of this.messages) {
+        const time = m.timestamp ? new Date(m.timestamp) : new Date();
+        const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const msgEl = document.createElement('div');
+        if (m.type === 'bot') {
+          msgEl.className = 'chat-message bot';
+          msgEl.innerHTML =
+            `<div class="chat-message-sender">🤖 ${this.escapeHtml(botName)}</div>` +
+            `<div>${this.escapeHtml(m.text)}</div>` +
+            `<div class="chat-message-time">${timeStr}</div>`;
+        } else if (m.type === 'admin') {
+          const senderHtml = m.senderName
+            ? `<div class="chat-message-sender">${this.escapeHtml(m.senderName)}</div>`
+            : '';
+          msgEl.className = 'chat-message admin';
+          msgEl.innerHTML =
+            senderHtml +
+            `<div>${this.escapeHtml(m.text)}</div>` +
+            `<div class="chat-message-time">${timeStr}</div>`;
+        } else {
+          msgEl.className = `chat-message ${m.type || 'customer'}`;
+          msgEl.innerHTML =
+            `<div>${this.escapeHtml(m.text)}</div>` +
+            `<div class="chat-message-time">${timeStr}</div>`;
+        }
+        container.appendChild(msgEl);
+      }
+      container.scrollTop = container.scrollHeight;
+    }
+
+    reconnectHumanSession() {
+      if (typeof io === 'undefined') {
+        // socket.io may not be loaded yet; retry shortly
+        setTimeout(() => this.reconnectHumanSession(), 300);
+        return;
+      }
+      this.socket = io(CONFIG.serverUrl);
+      this.socket.on('connect', () => {
+        this.socket.emit('session:start', {
+          name: this.customerName,
+          contact: this.customerContact,
+          location: this.browserLocation,
+          chatHistory: this.messages,
+          siteId: CONFIG.siteId,
+          apiKey: CONFIG.siteApiKey
+        });
+      });
+      this.socket.on('session:started', (data) => {
+        this.sessionId = data.sessionId;
+        this.isConnected = true;
+        this.saveState();
+      });
+      this.socket.on('chat:message', (msg) => {
+        if (msg.sender === 'customer') return;
+        const body = msg.message != null ? msg.message : msg.text;
+        this.addMessage(body, 'admin', msg.timestamp, msg.senderName);
+      });
+      this.socket.on('disconnect', () => {
+        if (this.endedByAdmin) return;
+      });
+      this.socket.on('session:closed-by-admin', (data) => {
+        this.endedByAdmin = true;
+        const msg = (data && data.message) || 'This conversation has been closed by the support team.';
+        this.addSystemMessage(msg);
+        const input = document.getElementById('chat-input');
+        if (input) {
+          input.disabled = true;
+          input.placeholder = 'Conversation ended';
+        }
+        this.saveState();
+      });
+    }
+    // ---- end session persistence ----
 
     injectStyles() {
       const styleEl = document.createElement('style');
@@ -605,11 +781,13 @@
     open() {
       this.isOpen = true;
       document.getElementById('chat-widget-window').classList.add('open');
+      this.saveState();
     }
 
     close() {
       this.isOpen = false;
       document.getElementById('chat-widget-window').classList.remove('open');
+      this.saveState();
     }
 
     startBotChat() {
@@ -666,6 +844,9 @@
 
       // Focus input
       document.getElementById('chat-input').focus();
+
+      this.chatStarted = true;
+      this.saveState();
     }
 
     showQuickReplies() {
@@ -891,6 +1072,7 @@
         this.updateChatStatus('human');
 
         this.addSystemMessage('Connected! A support agent will be with you shortly.');
+        this.saveState();
       });
 
       this.socket.on('chat:message', (msg) => {
@@ -939,6 +1121,7 @@
           input.disabled = true;
           input.placeholder = 'Conversation ended';
         }
+        this.saveState();
       });
     }
 
@@ -975,7 +1158,8 @@
       container.scrollTop = container.scrollHeight;
 
       // Store message in history
-      this.messages.push({ text, type, timestamp: time.toISOString() });
+      this.messages.push({ text, type, timestamp: time.toISOString(), senderName: senderName || null });
+      this.saveState();
     }
 
     addBotMessage(text) {
@@ -996,6 +1180,7 @@
 
       // Store in history
       this.messages.push({ text, type: 'bot', timestamp: time.toISOString() });
+      this.saveState();
     }
 
     addSystemMessage(text) {

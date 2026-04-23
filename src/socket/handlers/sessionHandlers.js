@@ -56,7 +56,9 @@ function createSessionHandlers({
         const ip = getRealIP(socket);
         const { name, location, siteId, contact, apiKey } = data || {};
 
-        // Validate site if provided
+        // Validate site if provided. Support two modes:
+        //   1. Legacy: explicit siteId + apiKey
+        //   2. Publishable key: apiKey only (industry standard, like Intercom/Crisp)
         let site = null;
         if (siteId) {
             site = siteRepository.findById(siteId);
@@ -70,6 +72,20 @@ function createSessionHandlers({
                 if (typeof socket.disconnect === 'function') socket.disconnect(true);
                 return;
             }
+        } else if (apiKey) {
+            site = siteRepository.findByApiKey(apiKey);
+            if (!site) {
+                socket.emit(OUT.ERROR, { message: 'Invalid API key' });
+                if (typeof socket.disconnect === 'function') socket.disconnect(true);
+                return;
+            }
+        } else if (REQUIRE_SITE_ID) {
+            socket.emit(OUT.ERROR, { message: 'siteId is required' });
+            if (typeof socket.disconnect === 'function') socket.disconnect(true);
+            return;
+        }
+
+        if (site) {
             // Per-site origin allow-list (skipped if site has none configured)
             const originHeader = socket.handshake?.headers?.origin
                 || socket.handshake?.headers?.referer
@@ -79,10 +95,6 @@ function createSessionHandlers({
                 if (typeof socket.disconnect === 'function') socket.disconnect(true);
                 return;
             }
-        } else if (REQUIRE_SITE_ID) {
-            socket.emit(OUT.ERROR, { message: 'siteId is required' });
-            if (typeof socket.disconnect === 'function') socket.disconnect(true);
-            return;
         }
 
         const sessionId = generateId();

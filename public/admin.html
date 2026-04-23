@@ -2155,7 +2155,14 @@
             setupAuthListeners();
         }
 
+        let socketListenersAttached = false;
         function setupSocketListeners() {
+            // Idempotent: socket reconnects re-fire 'admin:authenticated' which
+            // calls this function again. Without this guard we re-attach every
+            // listener on each reconnect, causing N-fold duplicate messages in
+            // the dashboard.
+            if (socketListenersAttached) return;
+            socketListenersAttached = true;
             // ----- Normalization helpers -----
             // Server (events.js) emits sessions with `name`, ticket messages with
             // `sender`/`message`. The admin UI was historically written against

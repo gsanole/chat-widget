@@ -78,6 +78,27 @@
       display: flex;
     }
 
+    /* Mobile: take the whole screen so the chat is actually usable on phones */
+    @media (max-width: 480px) {
+      #chat-widget-container {
+        bottom: 16px;
+        right: 16px;
+      }
+      #chat-widget-window {
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        left: 0;
+        top: 0;
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh; /* better on iOS Safari */
+        max-width: 100vw;
+        max-height: 100vh;
+        border-radius: 0;
+      }
+    }
+
     .chat-header {
       background: ${CONFIG.primaryColor};
       color: white;
@@ -624,7 +645,11 @@
         }
       }
 
-      if (state.isOpen) this.open();
+      // Always start with the bubble visible on page load; the user can
+      // re-open the chat if they want to continue. Avoids the bubble
+      // disappearing when restored isOpen=true gets out of sync with the
+      // rendered chat window.
+      this.isOpen = false;
     }
 
     replayMessages() {

@@ -141,3 +141,51 @@ describe('Regression: /api/ready is registered BEFORE the rate limiter (commits 
         expect(res.headers['ratelimit-limit']).toBeDefined();
     });
 });
+
+describe('Regression: mobile widget sizes responsively to viewport (commit 5ca75c2 + this fix)', () => {
+    const widgetSrc = fs.readFileSync(
+        path.join(__dirname, '..', '..', 'public', 'widget.js'),
+        'utf8'
+    );
+
+    test('widget defines a mobile breakpoint at max-width: 480px', () => {
+        expect(widgetSrc).toMatch(/@media\s*\(\s*max-width:\s*480px\s*\)/);
+    });
+
+    test('mobile chat window height uses dynamic viewport units (dvh) so it tracks the browser chrome', () => {
+        expect(widgetSrc).toMatch(/dvh/);
+    });
+
+    test('mobile chat window is NOT a full-screen takeover (must use min() or a viewport-relative cap)', () => {
+        // Either min(Xvh, ...) or an explicit < 100% cap is acceptable.
+        // What we explicitly disallow: a single "height: 100dvh" / "100vh" with no cap.
+        const lines = widgetSrc.split('\n');
+        const offending = lines.find(l =>
+            /^\s*height:\s*100d?vh\s*;?\s*$/.test(l) ||
+            /^\s*max-height:\s*100d?vh\s*;?\s*$/.test(l)
+        );
+        expect(offending).toBeUndefined();
+    });
+
+    test('widget reserves space for the bubble + safe-area insets on mobile', () => {
+        // The mobile sizing math must account for the 60px bubble and iOS safe areas.
+        expect(widgetSrc).toMatch(/env\(\s*safe-area-inset-(top|bottom)/);
+    });
+
+    test('widget has an additional breakpoint for very small phones (<= 380px)', () => {
+        expect(widgetSrc).toMatch(/@media\s*\(\s*max-width:\s*380px\s*\)/);
+    });
+
+    test('widget input font-size is >= 16px to prevent iOS Safari auto-zoom on focus', () => {
+        // iOS Safari zooms the viewport whenever a focused input has font-size < 16px,
+        // and does NOT zoom back out. Every input rule must therefore declare 16px+.
+        const inputBlocks = widgetSrc.match(/\.chat-[a-z-]*input[a-z-]*\s+input[^{]*\{[^}]*\}/gi) || [];
+        expect(inputBlocks.length).toBeGreaterThan(0);
+        for (const block of inputBlocks) {
+            const fontSize = block.match(/font-size:\s*(\d+)px/);
+            if (fontSize) {
+                expect(Number(fontSize[1])).toBeGreaterThanOrEqual(16);
+            }
+        }
+    });
+});

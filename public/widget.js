@@ -78,9 +78,9 @@
       display: flex;
     }
 
-    /* Mobile: leave a comfortable inset around the chat instead of taking
-       the whole screen, so the bubble area stays visible and the chat
-       feels like a popup, not a takeover. */
+    /* Mobile: scale the popup to roughly 70% of the viewport so it feels
+       like a chat bubble, not a takeover. Uses dvh so it adapts to
+       browser chrome (URL bar) and respects iOS safe areas. */
     @media (max-width: 480px) {
       #chat-widget-container {
         bottom: 12px;
@@ -89,16 +89,30 @@
       }
       #chat-widget-window {
         position: fixed;
-        bottom: 12px;
+        bottom: 84px; /* clear of the bubble */
         right: 12px;
         left: 12px;
         top: auto;
         width: auto;
         max-width: none;
-        /* Leave room for the bubble (60px) + inset + safe area */
-        height: calc(100dvh - 96px - env(safe-area-inset-top, 0px));
-        max-height: calc(100dvh - 96px - env(safe-area-inset-top, 0px));
+        /* ~70% of viewport, capped so it never overflows the safe area */
+        height: min(70dvh, calc(100dvh - 96px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)));
+        max-height: calc(100dvh - 96px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
         border-radius: 16px;
+      }
+    }
+
+    /* Very small phones: drop to ~60% of viewport so messages + input still fit. */
+    @media (max-width: 380px) {
+      #chat-widget-window {
+        height: min(60dvh, calc(100dvh - 110px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)));
+      }
+    }
+
+    /* Short screens (landscape phones): cap by viewport height. */
+    @media (max-height: 600px) and (max-width: 900px) {
+      #chat-widget-window {
+        height: calc(100dvh - 90px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
       }
     }
 
@@ -181,7 +195,8 @@
       padding: 12px;
       border: 1px solid #e5e7eb;
       border-radius: 8px;
-      font-size: 14px;
+      /* 16px prevents iOS Safari from auto-zooming the viewport on focus. */
+      font-size: 16px;
       outline: none;
       transition: border-color 0.2s;
     }
@@ -295,7 +310,8 @@
       padding: 10px 14px;
       border: 1px solid #e5e7eb;
       border-radius: 24px;
-      font-size: 14px;
+      /* 16px prevents iOS Safari from auto-zooming the viewport on focus. */
+      font-size: 16px;
       outline: none;
     }
 

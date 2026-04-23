@@ -139,6 +139,10 @@ function createApp(options = {}) {
             },
         },
         crossOriginEmbedderPolicy: false,
+        // Allow widget.js / socket.io to be loaded from third-party origins
+        // (customer websites embedding the chat widget). Per-site origin
+        // enforcement happens at the API layer (see siteSecurity.js).
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
     }));
 
     // CORS

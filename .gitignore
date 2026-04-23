@@ -30,3 +30,5 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+test_result.tmp

@@ -155,7 +155,11 @@ function createApp(options = {}) {
     // Health/readiness endpoints — registered BEFORE rate limiter so platform
     // probes (Render, Kubernetes, load balancers) are never throttled or 429'd.
     app.get('/api/ready', (req, res) => res.json({ ready: true }));
-    app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+    app.get('/api/health', (req, res) => res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    }));
 
     // Rate limiting
     app.use('/api/', createApiLimiter());

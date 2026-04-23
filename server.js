@@ -58,7 +58,8 @@ async function startServer() {
       console.log('DEFAULT SUPER ADMIN CREATED - Username: superadmin / Password: changeme123!');
     }
   } catch (err) {
-    console.error('Failed to initialize super admin:', err);
+    console.error('Failed to start server:', err);
+    process.exit(1);
   }
 }
 

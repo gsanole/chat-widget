@@ -72,21 +72,108 @@ function decodeBase32(encoded) {
   return Buffer.from(result);
 }
 
+// ===========================================
+// Encryption-at-rest for TOTP secrets
+// ===========================================
+//
+// When TOTP_ENCRYPTION_KEY is set (any printable string, recommended >=32
+// chars), TOTP secrets are stored on disk as:
+//   enc:v1:<base64-iv>:<base64-tag>:<base64-ciphertext>
+//
+// The wrapping key is derived deterministically from the env var with
+// scrypt(N=16384,r=8,p=1) so the same env var always unlocks the same
+// data. Algorithm: AES-256-GCM (authenticated; tampering -> decrypt fails).
+//
+// If TOTP_ENCRYPTION_KEY is NOT set we fall back to plaintext base32 (the
+// pre-encryption behavior). This keeps the feature opt-in and avoids
+// locking anyone out who hasn't configured the env var yet.
+//
+// If a stored secret is encrypted but no key is configured, decryption
+// returns null and verification fails closed (safer than guessing).
+
+const ENC_PREFIX = 'enc:v1:';
+const ENC_SCRYPT_SALT = Buffer.from('chatbot-totp-v1', 'utf8');
+
+let _cachedKeyEnv = null;
+let _cachedKey = null;
+function _deriveKey() {
+  const env = process.env.TOTP_ENCRYPTION_KEY;
+  if (!env) return null;
+  if (env === _cachedKeyEnv && _cachedKey) return _cachedKey;
+  _cachedKey = crypto.scryptSync(env, ENC_SCRYPT_SALT, 32);
+  _cachedKeyEnv = env;
+  return _cachedKey;
+}
+
+/**
+ * Encrypt a base32 secret string for storage. Returns the original string
+ * unchanged when no encryption key is configured, so callers can use this
+ * unconditionally.
+ */
+function encryptSecret(base32) {
+  if (typeof base32 !== 'string' || !base32) return base32;
+  const key = _deriveKey();
+  if (!key) return base32;
+  const iv = crypto.randomBytes(12); // GCM standard
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const ct = Buffer.concat([cipher.update(base32, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return ENC_PREFIX +
+    iv.toString('base64') + ':' +
+    tag.toString('base64') + ':' +
+    ct.toString('base64');
+}
+
+/**
+ * Decrypt a stored secret. Accepts both encrypted and plaintext input.
+ * Returns the plaintext base32 string on success, null if the input is
+ * encrypted but cannot be decrypted (missing key or tampered data).
+ */
+function decryptSecret(stored) {
+  if (typeof stored !== 'string') return stored;
+  if (!stored.startsWith(ENC_PREFIX)) return stored;
+  const key = _deriveKey();
+  if (!key) return null; // encrypted at rest but no key -> fail closed
+  try {
+    const parts = stored.slice(ENC_PREFIX.length).split(':');
+    if (parts.length !== 3) return null;
+    const iv = Buffer.from(parts[0], 'base64');
+    const tag = Buffer.from(parts[1], 'base64');
+    const ct = Buffer.from(parts[2], 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
+    return pt.toString('utf8');
+  } catch (_err) {
+    return null;
+  }
+}
+
+function isEncryptionEnabled() {
+  return !!process.env.TOTP_ENCRYPTION_KEY;
+}
+
 /**
  * Normalize a stored TOTP secret into a Buffer, regardless of how it was
  * persisted. Handles:
  *   - Buffer (fresh in-memory after setup)
  *   - base32 string (preferred persistent form)
+ *   - "enc:v1:..." encrypted base32 (when TOTP_ENCRYPTION_KEY is set)
  *   - Plain object {type:'Buffer', data:[...]} (legacy: how Node Buffers
  *     JSON-serialize when stored directly in JsonDB)
  *   - Array of bytes
- * Returns null on anything unparseable.
+ * Returns null on anything unparseable or undecryptable.
  */
 function normalizeSecret(secret) {
   if (!secret) return null;
   if (Buffer.isBuffer(secret)) return secret;
   if (typeof secret === 'string') {
-    const buf = decodeBase32(secret);
+    let s = secret;
+    if (s.startsWith(ENC_PREFIX)) {
+      s = decryptSecret(s);
+      if (!s) return null;
+    }
+    const buf = decodeBase32(s);
     return buf && buf.length ? buf : null;
   }
   if (Array.isArray(secret)) return Buffer.from(secret);
@@ -224,6 +311,9 @@ module.exports = {
   encodeBase32,
   decodeBase32,
   normalizeSecret,
+  encryptSecret,
+  decryptSecret,
+  isEncryptionEnabled,
   generateTOTP,
   verifyTOTP,
   generateTOTPUri,

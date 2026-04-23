@@ -146,11 +146,22 @@ class UserRepository extends BaseRepository {
         // Always persist as a base32 string. Storing a raw Buffer would
         // JSON-serialize as { type: 'Buffer', data: [...] } and fail to
         // verify after the next process restart.
+        //
+        // When TOTP_ENCRYPTION_KEY is set, the base32 is then wrapped with
+        // AES-256-GCM (encryptSecret returns the input unchanged when no
+        // key is configured, so this is safe either way).
+        const totp = require('../../utils/totp');
         let stored = secret;
         if (Buffer.isBuffer(secret)) {
-            stored = require('../../utils/totp').encodeBase32(secret);
+            stored = totp.encodeBase32(secret);
         } else if (secret && typeof secret === 'object' && Array.isArray(secret.data)) {
-            stored = require('../../utils/totp').encodeBase32(Buffer.from(secret.data));
+            stored = totp.encodeBase32(Buffer.from(secret.data));
+        } else if (typeof secret === 'string' && secret.startsWith('enc:v1:')) {
+            // Already encrypted; store as-is to avoid double-wrapping.
+            return this.db.update(u => u.id === userId, { totp_secret: secret });
+        }
+        if (typeof stored === 'string') {
+            stored = totp.encryptSecret(stored);
         }
         return this.db.update(u => u.id === userId, { totp_secret: stored });
     }

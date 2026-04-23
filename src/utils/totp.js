@@ -106,9 +106,9 @@ function generateTOTP(secret, time = null) {
 }
 
 /**
- * Verify a TOTP code (allows 1 period drift for clock skew)
+ * Verify a TOTP code (allows 2 periods drift for clock skew, ~±60s)
  */
-function verifyTOTP(secret, code, window = 1) {
+function verifyTOTP(secret, code, window = 2) {
   if (!secret || !code) return false;
   const now = Date.now() / 1000;
 

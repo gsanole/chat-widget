@@ -62,7 +62,21 @@ const chatbotConfig = {
             escalationKeywords: ['human', 'agent', 'person', 'real person', 'live support', 'representative'],
             escalationMessage: "I'll connect you with a support agent right away.",
             faq: [],
-            quickReplies: ['Talk to Human']
+            quickReplies: ['Talk to Human'],
+            humanHours: {
+                enabled: false,
+                timezone: 'America/New_York',
+                schedule: {
+                    mon: [{ open: '09:00', close: '17:00' }],
+                    tue: [{ open: '09:00', close: '17:00' }],
+                    wed: [{ open: '09:00', close: '17:00' }],
+                    thu: [{ open: '09:00', close: '17:00' }],
+                    fri: [{ open: '09:00', close: '17:00' }],
+                    sat: [],
+                    sun: []
+                },
+                offHoursMessage: "Our support team is currently offline. Please leave a message and we'll get back to you when we're available."
+            }
         };
     },
 

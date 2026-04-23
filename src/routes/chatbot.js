@@ -7,6 +7,7 @@
 const express = require('express');
 const ipUtils = require('../utils/ipUtils');
 const { isOriginAllowed, SiteRateLimiter } = require('../utils/siteSecurity');
+const { ChatbotService } = require('../services/ChatbotService');
 
 /**
  * Create chatbot router
@@ -78,11 +79,13 @@ function createChatbotRouter({ chatbotService, auditRepository, authMiddleware, 
     router.get('/config', (req, res) => {
         if (!enforceSiteSecurity(req, res)) return;
         const config = chatbotService.getConfig() || {};
+        const humanAvailable = ChatbotService.isHumanAvailable(config);
         res.json({
             botName: config.botName || config.name || 'Assistant',
             enabled: config.enabled !== false,
             welcomeMessage: config.welcomeMessage || '',
-            ...config
+            ...config,
+            humanAvailable
         });
     });
 

@@ -36,7 +36,7 @@ class ChatbotService {
      * @param {Object} siteConfig - Site-specific config (optional)
      * @returns {Object} Bot response
      */
-    processMessage(message, siteConfig = null) {
+    processMessage(message, siteConfig = null, now = new Date()) {
         const config = siteConfig || this.getConfig();
 
         if (!config.enabled) {
@@ -47,6 +47,16 @@ class ChatbotService {
 
         // Check for escalation keywords
         if (this._matchesEscalation(lowerMessage, config)) {
+            // Gate escalation by humanHours schedule (if enabled).
+            if (!ChatbotService.isHumanAvailable(config, now)) {
+                const offHoursMessage = (config.humanHours && config.humanHours.offHoursMessage)
+                    || "Our support team is currently offline. Please leave a message and we'll get back to you when we're available.";
+                return {
+                    type: 'offHours',
+                    content: offHoursMessage,
+                    shouldEscalate: false
+                };
+            }
             return {
                 type: 'escalation',
                 content: config.escalationMessage,
@@ -224,6 +234,76 @@ class ChatbotService {
      */
     deleteFaq(id) {
         return this.chatbotConfig.deleteFaqItem(id);
+    }
+
+    /**
+     * Determine whether human escalation is currently allowed based on the
+     * `humanHours` schedule in the chatbot config. If `humanHours.enabled` is
+     * not true, returns true (24/7 — preserves existing behavior).
+     *
+     * Schedule shape:
+     *   humanHours: {
+     *     enabled: true,
+     *     timezone: 'America/New_York',   // IANA tz; defaults to UTC
+     *     schedule: {
+     *       mon: [{ open: '09:00', close: '17:00' }],
+     *       ...
+     *       sun: []                        // empty/missing = closed
+     *     },
+     *     offHoursMessage: '...'
+     *   }
+     *
+     * @param {Object} config - Chatbot config (or site-specific override)
+     * @param {Date}   [now]  - Current time, defaults to new Date()
+     * @returns {boolean}
+     */
+    static isHumanAvailable(config, now = new Date()) {
+        const hh = config && config.humanHours;
+        if (!hh || hh.enabled !== true) return true;
+
+        const tz = hh.timezone || 'UTC';
+        let parts;
+        try {
+            // en-GB gives 24h HH:MM:SS and weekday short
+            const fmt = new Intl.DateTimeFormat('en-GB', {
+                timeZone: tz,
+                weekday: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            parts = fmt.formatToParts(now);
+        } catch (e) {
+            // Bad timezone -> fail open (treat as available so admins aren't locked out
+            // by a typo). Logging avoided to keep this path silent in tests.
+            return true;
+        }
+
+        const get = (type) => (parts.find(p => p.type === type) || {}).value;
+        const weekdayMap = {
+            Mon: 'mon', Tue: 'tue', Wed: 'wed', Thu: 'thu',
+            Fri: 'fri', Sat: 'sat', Sun: 'sun'
+        };
+        const day = weekdayMap[get('weekday')];
+        const hour = parseInt(get('hour'), 10);
+        const minute = parseInt(get('minute'), 10);
+        if (!day || Number.isNaN(hour) || Number.isNaN(minute)) return true;
+
+        const nowMin = hour * 60 + minute;
+        const ranges = (hh.schedule && hh.schedule[day]) || [];
+        if (!Array.isArray(ranges) || ranges.length === 0) return false;
+
+        for (const r of ranges) {
+            if (!r || typeof r.open !== 'string' || typeof r.close !== 'string') continue;
+            const [oh, om] = r.open.split(':').map(n => parseInt(n, 10));
+            const [ch, cm] = r.close.split(':').map(n => parseInt(n, 10));
+            if ([oh, om, ch, cm].some(Number.isNaN)) continue;
+            const openMin = oh * 60 + om;
+            const closeMin = ch * 60 + cm;
+            // Same-day window only. Inclusive open, exclusive close.
+            if (nowMin >= openMin && nowMin < closeMin) return true;
+        }
+        return false;
     }
 }
 

@@ -936,8 +936,24 @@
         return;
       }
 
+      // If business-hours gating is enabled and we're outside hours,
+      // hide any quick reply that would trigger human escalation.
+      let replies = this.chatbotConfig.quickReplies;
+      if (this.chatbotConfig.humanAvailable === false) {
+        const keywords = (this.chatbotConfig.escalationKeywords || []).map(k => String(k).toLowerCase());
+        replies = replies.filter(r => {
+          const lower = String(r).toLowerCase();
+          return !keywords.some(k => lower.includes(k));
+        });
+      }
+
+      if (!replies.length) {
+        container.style.display = 'none';
+        return;
+      }
+
       container.style.display = 'flex';
-      container.innerHTML = this.chatbotConfig.quickReplies.map(reply =>
+      container.innerHTML = replies.map(reply =>
         `<button class="chat-quick-reply">${this.escapeHtml(reply)}</button>`
       ).join('');
 
@@ -999,6 +1015,12 @@
             setTimeout(() => {
               this.promptForHumanSupport();
             }, 1500);
+          } else if (data.type === 'offHours') {
+            // Escalation requested but outside business hours.
+            // Refresh local config so the quick-reply gets hidden too.
+            this.chatbotConfig.humanAvailable = false;
+            this.addBotMessage(data.message);
+            this.showQuickReplies();
           } else {
             // Bot response (faq or fallback)
             this.addBotMessage(data.message);

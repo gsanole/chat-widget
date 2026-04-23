@@ -1100,6 +1100,49 @@
 
                 <hr style="margin: 24px 0; border: none; border-top: 1px solid #e5e7eb;" />
 
+                <!-- Human Support Hours -->
+                <div class="setting-section">
+                    <h4>🕘 Human Support Hours</h4>
+                    <p style="font-size: 13px; color: #6b7280; margin-bottom: 12px;">
+                        Restrict when customers can request a live agent. Outside these hours,
+                        the "Talk to Human" quick reply is hidden and the bot replies with the
+                        off-hours message instead.
+                    </p>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="human-hours-enabled" style="width: auto;" />
+                            Enable business-hours gating
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label>Timezone (IANA, e.g. America/New_York, Europe/London)</label>
+                        <input type="text" id="human-hours-timezone" placeholder="America/New_York" />
+                    </div>
+                    <div class="form-group">
+                        <label>Off-hours message</label>
+                        <textarea id="human-hours-offmsg" rows="2"
+                            style="width: 100%; padding: 8px; border: 1px solid #e5e7eb; border-radius: 8px; font-family: inherit;"
+                            placeholder="Our support team is currently offline..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Weekly schedule</label>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <thead>
+                                <tr style="background: #f9fafb;">
+                                    <th style="text-align: left; padding: 6px;">Day</th>
+                                    <th style="text-align: left; padding: 6px;">Open</th>
+                                    <th style="text-align: left; padding: 6px;">Open time</th>
+                                    <th style="text-align: left; padding: 6px;">Close time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="human-hours-rows"></tbody>
+                        </table>
+                    </div>
+                    <button type="button" class="btn btn-primary" id="btn-save-human-hours">Save Hours</button>
+                </div>
+
+                <hr style="margin: 24px 0; border: none; border-top: 1px solid #e5e7eb;" />
+
                 <!-- Escalation Keywords -->
                 <div class="setting-section">
                     <h4>Escalation Keywords</h4>
@@ -1674,6 +1717,9 @@
 
             // Geo blocking
             renderGeoBlocking();
+
+            // Human-support hours
+            renderHumanHours();
         }
 
         function renderGeoBlocking() {
@@ -1743,6 +1789,77 @@
                 alert('Country filter saved.');
             } else {
                 alert('Failed to save country filter. Check console.');
+            }
+        }
+
+        const HUMAN_HOURS_DAYS = [
+            { key: 'mon', label: 'Monday' },
+            { key: 'tue', label: 'Tuesday' },
+            { key: 'wed', label: 'Wednesday' },
+            { key: 'thu', label: 'Thursday' },
+            { key: 'fri', label: 'Friday' },
+            { key: 'sat', label: 'Saturday' },
+            { key: 'sun', label: 'Sunday' }
+        ];
+
+        function renderHumanHours() {
+            const hh = chatbotConfig.humanHours || {};
+            const enabledEl = document.getElementById('human-hours-enabled');
+            const tzEl = document.getElementById('human-hours-timezone');
+            const msgEl = document.getElementById('human-hours-offmsg');
+            if (enabledEl) enabledEl.checked = hh.enabled === true;
+            if (tzEl) tzEl.value = hh.timezone || 'America/New_York';
+            if (msgEl) msgEl.value = hh.offHoursMessage || '';
+
+            const tbody = document.getElementById('human-hours-rows');
+            if (!tbody) return;
+            const sched = (hh.schedule && typeof hh.schedule === 'object') ? hh.schedule : {};
+            tbody.innerHTML = HUMAN_HOURS_DAYS.map(d => {
+                const ranges = Array.isArray(sched[d.key]) ? sched[d.key] : [];
+                const open = ranges[0]?.open || '09:00';
+                const close = ranges[0]?.close || '17:00';
+                const isOpen = ranges.length > 0;
+                return `
+                    <tr data-day="${d.key}" style="border-top: 1px solid #f3f4f6;">
+                        <td style="padding: 6px;">${d.label}</td>
+                        <td style="padding: 6px;">
+                            <input type="checkbox" class="hh-day-on" ${isOpen ? 'checked' : ''} />
+                        </td>
+                        <td style="padding: 6px;">
+                            <input type="time" class="hh-day-open" value="${open}" />
+                        </td>
+                        <td style="padding: 6px;">
+                            <input type="time" class="hh-day-close" value="${close}" />
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function saveHumanHours() {
+            const tbody = document.getElementById('human-hours-rows');
+            const schedule = {};
+            if (tbody) {
+                tbody.querySelectorAll('tr[data-day]').forEach(tr => {
+                    const day = tr.getAttribute('data-day');
+                    const on = tr.querySelector('.hh-day-on')?.checked;
+                    const open = tr.querySelector('.hh-day-open')?.value || '09:00';
+                    const close = tr.querySelector('.hh-day-close')?.value || '17:00';
+                    schedule[day] = on ? [{ open, close }] : [];
+                });
+            }
+            chatbotConfig.humanHours = {
+                enabled: document.getElementById('human-hours-enabled').checked,
+                timezone: (document.getElementById('human-hours-timezone').value || 'America/New_York').trim(),
+                schedule,
+                offHoursMessage: document.getElementById('human-hours-offmsg').value || ''
+            };
+            const ok = await saveChatbotConfig();
+            if (ok) {
+                renderHumanHours();
+                alert('Business hours saved.');
+            } else {
+                alert('Failed to save business hours. Check console.');
             }
         }
 
@@ -1932,6 +2049,7 @@
             const btnAddQuickReply = document.getElementById('btn-add-quick-reply');
             const btnAddGeoCountry = document.getElementById('btn-add-geo-country');
             const btnSaveGeoBlocking = document.getElementById('btn-save-geo-blocking');
+            const btnSaveHumanHours = document.getElementById('btn-save-human-hours');
             const newGeoCountry = document.getElementById('new-geo-country');
 
             if (btnSaveSettings) btnSaveSettings.addEventListener('click', saveChatbotSettings);
@@ -1940,6 +2058,7 @@
             if (btnAddQuickReply) btnAddQuickReply.addEventListener('click', addQuickReply);
             if (btnAddGeoCountry) btnAddGeoCountry.addEventListener('click', addGeoCountry);
             if (btnSaveGeoBlocking) btnSaveGeoBlocking.addEventListener('click', saveGeoBlocking);
+            if (btnSaveHumanHours) btnSaveHumanHours.addEventListener('click', saveHumanHours);
             if (newGeoCountry) {
                 newGeoCountry.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') { e.preventDefault(); addGeoCountry(); }

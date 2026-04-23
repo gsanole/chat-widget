@@ -78,24 +78,27 @@
       display: flex;
     }
 
-    /* Mobile: take the whole screen so the chat is actually usable on phones */
+    /* Mobile: leave a comfortable inset around the chat instead of taking
+       the whole screen, so the bubble area stays visible and the chat
+       feels like a popup, not a takeover. */
     @media (max-width: 480px) {
       #chat-widget-container {
-        bottom: 16px;
-        right: 16px;
+        bottom: 12px;
+        right: 12px;
+        left: 12px;
       }
       #chat-widget-window {
         position: fixed;
-        bottom: 0;
-        right: 0;
-        left: 0;
-        top: 0;
-        width: 100vw;
-        height: 100vh;
-        height: 100dvh; /* better on iOS Safari */
-        max-width: 100vw;
-        max-height: 100vh;
-        border-radius: 0;
+        bottom: 12px;
+        right: 12px;
+        left: 12px;
+        top: auto;
+        width: auto;
+        max-width: none;
+        /* Leave room for the bubble (60px) + inset + safe area */
+        height: calc(100dvh - 96px - env(safe-area-inset-top, 0px));
+        max-height: calc(100dvh - 96px - env(safe-area-inset-top, 0px));
+        border-radius: 16px;
       }
     }
 

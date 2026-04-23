@@ -6208,5 +6208,125 @@
     "ip_address": "127.0.0.1",
     "user_agent": null,
     "timestamp": 1776902506
+  },
+  {
+    "id": "cb3fea3c-0e3b-4157-9d00-bc7b4ec42463",
+    "user_id": null,
+    "username": "socket_admin_1776902929995",
+    "action": "LOGIN_FAILED",
+    "resource_type": "user",
+    "resource_id": null,
+    "details": {
+      "reason": "Invalid credentials",
+      "via": "socket"
+    },
+    "ip_address": "127.0.0.1",
+    "user_agent": null,
+    "timestamp": 1776902930
+  },
+  {
+    "id": "c1b50645-d8e2-4341-b1dd-39420a59bd45",
+    "user_id": null,
+    "username": "socket_admin_1776902929995",
+    "action": "LOGIN_FAILED",
+    "resource_type": "user",
+    "resource_id": null,
+    "details": {
+      "reason": "Invalid credentials",
+      "via": "socket"
+    },
+    "ip_address": "127.0.0.1",
+    "user_agent": null,
+    "timestamp": 1776902930
+  },
+  {
+    "id": "303934d2-2168-4345-a92b-c8a9c4746498",
+    "user_id": null,
+    "username": "socket_admin_1776902929995",
+    "action": "LOGIN_FAILED",
+    "resource_type": "user",
+    "resource_id": null,
+    "details": {
+      "reason": "Invalid credentials",
+      "via": "socket"
+    },
+    "ip_address": "127.0.0.1",
+    "user_agent": null,
+    "timestamp": 1776902930
+  },
+  {
+    "id": "6cdf2070-ca91-4abb-b241-ef06689eee1b",
+    "user_id": null,
+    "username": "socket_admin_1776902929995",
+    "action": "LOGIN_FAILED",
+    "resource_type": "user",
+    "resource_id": null,
+    "details": {
+      "reason": "Invalid credentials",
+      "via": "socket"
+    },
+    "ip_address": "127.0.0.1",
+    "user_agent": null,
+    "timestamp": 1776902939
+  },
+  {
+    "id": "7b63b496-cd33-48d1-a5fa-0aaac597dda9",
+    "user_id": null,
+    "username": "socket_admin_1776902929995",
+    "action": "LOGIN_FAILED",
+    "resource_type": "user",
+    "resource_id": null,
+    "details": {
+      "reason": "Invalid credentials",
+      "via": "socket"
+    },
+    "ip_address": "127.0.0.1",
+    "user_agent": null,
+    "timestamp": 1776902939
+  },
+  {
+    "id": "db51fce7-3d29-416c-8c7b-9f487cde7608",
+    "user_id": null,
+    "username": "socket_admin_1776902929995",
+    "action": "LOGIN_FAILED",
+    "resource_type": "user",
+    "resource_id": null,
+    "details": {
+      "reason": "Invalid credentials",
+      "via": "socket"
+    },
+    "ip_address": "127.0.0.1",
+    "user_agent": null,
+    "timestamp": 1776902939
+  },
+  {
+    "id": "191f7f59-8f54-4fb2-972a-db69341343a4",
+    "user_id": null,
+    "username": "socket_admin_1776902929995",
+    "action": "LOGIN_FAILED",
+    "resource_type": "user",
+    "resource_id": null,
+    "details": {
+      "reason": "Invalid credentials",
+      "via": "socket"
+    },
+    "ip_address": "127.0.0.1",
+    "user_agent": null,
+    "timestamp": 1776902939
+  },
+  {
+    "id": "56c3fe09-ce34-4e54-9541-b067ab4ddcdf",
+    "user_id": null,
+    "username": "socket_admin_1776902929995",
+    "action": "LOGIN_FAILED",
+    "resource_type": "user",
+    "resource_id": null,
+    "details": {
+      "reason": "Invalid credentials",
+      "via": "socket"
+    },
+    "ip_address": "127.0.0.1",
+    "user_agent": null,
+    "timestamp": 1776902939
   }
 ]

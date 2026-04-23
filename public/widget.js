@@ -669,7 +669,7 @@
         return;
       }
       this.socket = io(CONFIG.serverUrl);
-      this.socket.on('connect', () => {
+      const startNewSession = () => {
         this.socket.emit('session:start', {
           name: this.customerName,
           contact: this.customerContact,
@@ -678,6 +678,25 @@
           siteId: CONFIG.siteId,
           apiKey: CONFIG.siteApiKey
         });
+      };
+      this.socket.on('connect', () => {
+        // If we have a previously-issued sessionId, try to resume it
+        // so the support dashboard sees the SAME session, not a new one.
+        if (this.sessionId) {
+          this.socket.emit('session:resume', this.sessionId);
+        } else {
+          startNewSession();
+        }
+      });
+      this.socket.on('session:not-found', () => {
+        // Server doesn't have our session anymore — start fresh.
+        this.sessionId = null;
+        startNewSession();
+      });
+      this.socket.on('session:resumed', (data) => {
+        this.sessionId = data.sessionId;
+        this.isConnected = true;
+        this.saveState();
       });
       this.socket.on('session:started', (data) => {
         this.sessionId = data.sessionId;

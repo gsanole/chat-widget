@@ -12,6 +12,10 @@ _*.json
 _*.txt
 results_final.txt
 final_test_output.txt
+test_results.txt
+test_output.txt
+test_output.log
+test_error.log
 
 # Logs
 *.log

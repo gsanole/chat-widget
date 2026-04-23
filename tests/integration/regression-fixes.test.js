@@ -234,3 +234,166 @@ describe('Regression: admin login trims whitespace from copy-pasted credentials 
         expect(res.status).toBe(401);
     });
 });
+
+describe('Regression: recovery_codes accepted as array (not just JSON string) (commit "fix(2fa): handle recovery_codes stored as array")', () => {
+    // Bug symptom: every login attempt for users whose recovery_codes had
+    // been written as a real array (rather than a JSON-stringified array)
+    // failed with "Authentication error" because JSON.parse threw on a
+    // non-string. Fix: detect Array.isArray and skip the parse.
+    const db = require('../../src/database');
+    const totpUtils = require('../../src/utils/totp');
+
+    const TEST_USER = 'regression-array-codes-' + Date.now();
+    const TEST_PASS = 'ArrayCodesPass!9999';
+    const RECOVERY = ['AAAA-BBBB', 'CCCC-DDDD', 'EEEE-FFFF'];
+    let secret;
+
+    beforeAll(async () => {
+        await db.users.create({
+            username: TEST_USER,
+            password: TEST_PASS,
+            role: 'admin',
+            email: TEST_USER + '@test.local'
+        });
+        const u = db.users.findByUsername(TEST_USER);
+        secret = totpUtils.generateSecret();
+        db.users.setTotpSecret(u.id, secret);
+        // Persist recovery_codes as a real array, not a JSON string. This
+        // is the broken-on-disk shape that the fix has to tolerate.
+        db.users.db.update(uu => uu.id === u.id, {
+            totp_enabled: 1,
+            recovery_codes: [...RECOVERY]
+        });
+    });
+
+    test('login with valid TOTP succeeds even when recovery_codes is an array (no parse crash)', async () => {
+        const code = totpUtils.generateTOTP(secret);
+        const res = await request(app)
+            .post('/api/admin/login')
+            .set('x-forwarded-for', PUBLIC_IP)
+            .send({ username: TEST_USER, password: TEST_PASS, totpCode: code });
+        expect(res.status).toBe(200);
+        // Must not have leaked JSON.parse error to the caller.
+        expect(res.body.error).toBeUndefined();
+        expect(res.body.token).toBeDefined();
+    });
+
+    test('login with a recovery code succeeds and consumes the code', async () => {
+        const res = await request(app)
+            .post('/api/admin/login')
+            .set('x-forwarded-for', PUBLIC_IP)
+            .send({ username: TEST_USER, password: TEST_PASS, totpCode: 'CCCC-DDDD' });
+        expect(res.status).toBe(200);
+        expect(res.body.token).toBeDefined();
+
+        // Code must be removed from the stored list (single-use).
+        const refreshed = db.users.findByUsername(TEST_USER);
+        const codes = Array.isArray(refreshed.recovery_codes)
+            ? refreshed.recovery_codes
+            : JSON.parse(refreshed.recovery_codes);
+        expect(codes).not.toContain('CCCC-DDDD');
+    });
+
+    test('invalid 2FA code returns 401, not 500 / "Authentication error"', async () => {
+        const res = await request(app)
+            .post('/api/admin/login')
+            .set('x-forwarded-for', PUBLIC_IP)
+            .send({ username: TEST_USER, password: TEST_PASS, totpCode: '000000' });
+        expect(res.status).toBe(401);
+        expect(res.body.error).toBe('Invalid 2FA code');
+    });
+});
+
+describe('Regression: admin login bundles 2FA into a single admin:auth call (survives socket reconnect) (commit "fix(admin): always send 2FA with admin:auth")', () => {
+    // Bug symptom: on flaky mobile networks the admin client would fire
+    // admin:auth, get back admin:requires-2fa, then disconnect/reconnect
+    // before sending admin:submit-2fa. The new socket has no pendingUser,
+    // so the 2FA submit failed and the user could never log in.
+    // Fix: client always sends username+password+totpCode in one shot, so
+    // server never relies on pendingUser surviving the round-trip.
+    const fsLocal = require('fs');
+    const adminHtmlPath = path.join(__dirname, '..', '..', 'public', 'admin.html');
+    const adminHtml = fsLocal.readFileSync(adminHtmlPath, 'utf8');
+
+    test('admin.html login() emits admin:auth with username, password, AND totpCode in one payload', () => {
+        // The exact emit pattern the fix introduced.
+        const matches = adminHtml.match(
+            /socket\.emit\(\s*['"]admin:auth['"]\s*,\s*\{\s*username\s*,\s*password\s*,\s*totpCode\s*\}\s*\)/g
+        );
+        expect(matches).not.toBeNull();
+        // Should be present in both the "fresh socket" and "existing socket" branches.
+        expect(matches.length).toBeGreaterThanOrEqual(2);
+    });
+
+    test('admin.html no longer emits the standalone admin:submit-2fa flow', () => {
+        // The fragile two-step flow must be gone from the client. (Server
+        // handler may still exist for back-compat, but the client must not
+        // rely on it.)
+        expect(adminHtml).not.toMatch(/socket\.emit\(\s*['"]admin:submit-2fa['"]/);
+    });
+
+    test('admin.html totp input value is read and trimmed before emit', () => {
+        // The fix also trims TOTP — copy/paste from authenticators sometimes
+        // includes a trailing space.
+        expect(adminHtml).toMatch(/totpInput\.value\.trim\(\)/);
+    });
+
+    test('server adminHandlers.handleAuth accepts totpCode in the initial admin:auth payload', () => {
+        const handlerSrc = fsLocal.readFileSync(
+            path.join(__dirname, '..', '..', 'src', 'socket', 'handlers', 'adminHandlers.js'),
+            'utf8'
+        );
+        // The handler must extract totpCode from the same payload as
+        // username/password (single-shot auth), not require a follow-up event.
+        expect(handlerSrc).toMatch(/raw\.totpCode/);
+        expect(handlerSrc).toMatch(/totp\.verifyTOTP\(\s*user\.totp_secret\s*,\s*totpCode\s*\)/);
+    });
+});
+
+describe('Regression: scripts/reset-admin-password.js requires CONFIRM_RESET and audit-logs (commit cfafa9a)', () => {
+    // Bug class: a single short shell command could nuke an admin's password
+    // and disable 2FA without leaving a trace. Fix: require an env-var
+    // confirmation matching the username, and write an ADMIN_PASSWORD_RESET_SCRIPT
+    // entry to the audit log.
+    const fsLocal = require('fs');
+    const scriptSrc = fsLocal.readFileSync(
+        path.join(__dirname, '..', '..', 'scripts', 'reset-admin-password.js'),
+        'utf8'
+    );
+
+    test('script refuses to run unless CONFIRM_RESET env var matches the username argument', () => {
+        // Look for the literal guard the fix introduced.
+        expect(scriptSrc).toMatch(/process\.env\.CONFIRM_RESET\s*!==\s*username/);
+        // And exits non-zero so it cannot silently succeed.
+        expect(scriptSrc).toMatch(/process\.exit\(\s*1\s*\)/);
+    });
+
+    test('script writes an ADMIN_PASSWORD_RESET_SCRIPT audit entry on success', () => {
+        // Audit must capture the action so a malicious or accidental run
+        // is forensically traceable.
+        expect(scriptSrc).toMatch(/db\.audit\.log\s*\(/);
+        expect(scriptSrc).toMatch(/['"]ADMIN_PASSWORD_RESET_SCRIPT['"]/);
+    });
+
+    test('script captures the OS user that ran it in the audit details', () => {
+        // For attribution: who triggered the reset?
+        expect(scriptSrc).toMatch(/process\.env\.USER\s*\|\|\s*process\.env\.USERNAME/);
+    });
+
+    test('script disables 2FA atomically with the password reset (lockout-recovery contract)', () => {
+        // The reset must clear totp_secret AND recovery_codes so the user
+        // can actually log back in afterwards.
+        expect(scriptSrc).toMatch(/totp_enabled:\s*0/);
+        expect(scriptSrc).toMatch(/totp_secret:\s*null/);
+        expect(scriptSrc).toMatch(/recovery_codes:\s*null/);
+    });
+
+    test('migrate-totp-secrets.js exists and is idempotent (does not double-wrap)', () => {
+        const migPath = path.join(__dirname, '..', '..', 'scripts', 'migrate-totp-secrets.js');
+        expect(fsLocal.existsSync(migPath)).toBe(true);
+        const migSrc = fsLocal.readFileSync(migPath, 'utf8');
+        // Already-encrypted secrets must be left alone, not re-encrypted.
+        expect(migSrc).toMatch(/alreadyEncrypted/);
+        expect(migSrc).toMatch(/startsWith\(\s*['"]enc:v1:['"]\s*\)/);
+    });
+});

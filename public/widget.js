@@ -578,6 +578,13 @@
       const state = this.loadState();
       if (!state || !state.chatStarted) return;
 
+      // If the agent ended the conversation, treat refresh as a clean slate
+      // (don't keep a closed chat open across page loads).
+      if (state.endedByAdmin) {
+        this.clearState();
+        return;
+      }
+
       this.messages = Array.isArray(state.messages) ? state.messages : [];
       this.customerName = state.customerName || 'Visitor';
       this.customerContact = state.customerContact || null;

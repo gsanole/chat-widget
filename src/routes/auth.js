@@ -41,7 +41,11 @@ function createAuthRouter({
 
     // Admin login
     router.post('/admin/login', authLimiter, async (req, res) => {
-        const { username, password, totpCode } = req.body;
+        // Trim whitespace - copy/paste from password managers and mobile
+        // keyboards frequently appends a trailing space.
+        const username = typeof req.body.username === 'string' ? req.body.username.trim() : req.body.username;
+        const password = typeof req.body.password === 'string' ? req.body.password.trim() : req.body.password;
+        const totpCode = typeof req.body.totpCode === 'string' ? req.body.totpCode.trim() : req.body.totpCode;
         const ip = req.ip || req.socket?.remoteAddress;
         const userAgent = req.headers['user-agent'];
 

@@ -189,3 +189,48 @@ describe('Regression: mobile widget sizes responsively to viewport (commit 5ca75
         }
     });
 });
+
+describe('Regression: admin login trims whitespace from copy-pasted credentials (this fix)', () => {
+    const bcrypt = require('bcrypt');
+    const db = require('../../src/database');
+
+    const TEST_USER = 'regression-trim-user-' + Date.now();
+    const TEST_PASS = 'CorrectHorseBatteryStaple!42';
+
+    beforeAll(async () => {
+        // Seed a known user with a known password. Username is unique per
+        // run so we never collide with prior state.
+        await db.users.create({
+            username: TEST_USER,
+            password: TEST_PASS,
+            role: 'admin',
+            email: TEST_USER + '@test.local'
+        });
+    });
+
+    test('login succeeds when username has trailing whitespace (mobile copy-paste)', async () => {
+        const res = await request(app)
+            .post('/api/admin/login')
+            .set('x-forwarded-for', PUBLIC_IP)
+            .send({ username: TEST_USER + ' ', password: TEST_PASS });
+        expect(res.status).toBe(200);
+        expect(res.body.error).toBeUndefined();
+    });
+
+    test('login succeeds when password has trailing whitespace (mobile copy-paste)', async () => {
+        const res = await request(app)
+            .post('/api/admin/login')
+            .set('x-forwarded-for', PUBLIC_IP)
+            .send({ username: TEST_USER, password: TEST_PASS + ' ' });
+        expect(res.status).toBe(200);
+        expect(res.body.error).toBeUndefined();
+    });
+
+    test('login still rejects a genuinely wrong password', async () => {
+        const res = await request(app)
+            .post('/api/admin/login')
+            .set('x-forwarded-for', PUBLIC_IP)
+            .send({ username: TEST_USER, password: 'definitely-not-the-password' });
+        expect(res.status).toBe(401);
+    });
+});

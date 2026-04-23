@@ -89,9 +89,14 @@ function createAdminHandlers({
      */
     async function handleAuth(socket, data) {
         const ip = getRealIP(socket);
-        const { username, password, totpCode } = typeof data === 'string'
+        const raw = typeof data === 'string'
             ? { username: null, password: data, totpCode: null }
-            : data;
+            : (data || {});
+        // Trim whitespace - copy/paste (especially on mobile) frequently
+        // appends a trailing space to the username or password.
+        const username = typeof raw.username === 'string' ? raw.username.trim() : raw.username;
+        const password = typeof raw.password === 'string' ? raw.password.trim() : raw.password;
+        const totpCode = typeof raw.totpCode === 'string' ? raw.totpCode.trim() : raw.totpCode;
 
         try {
             if (!username) {

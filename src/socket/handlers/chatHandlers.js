@@ -26,8 +26,19 @@ function createChatHandlers({
     adminSockets,
     sessions,
     getRealIP,
-    hasPermission
+    hasPermission,
+    chatbotService,
+    lygHub
 }) {
+
+    /** Fire-and-forget lyg_hub mirror. Never throws. */
+    function mirrorToLygHub(payload) {
+        if (!lygHub || !lygHub.enabled) return;
+        // Resolve once; .send() also catches but we double-guard the .then chain.
+        Promise.resolve()
+            .then(() => lygHub.send(payload))
+            .catch(() => { /* swallowed; chat must keep working */ });
+    }
 
     /**
      * Broadcast message to all admins
@@ -203,6 +214,24 @@ function createChatHandlers({
             sessionId: targetId,
             updates: { lastActivity: timestamp }
         });
+
+        // Mirror to lyg_hub (agent reply). Never escalate=true here
+        // — agent replies just append to a linked ticket on the
+        // lyg_hub side; pending if no ticket exists yet.
+        if (lygHub && lygHub.enabled) {
+            mirrorToLygHub({
+                event: 'message',
+                messageId: lygHub.genMessageId(),
+                sessionId: targetId,
+                siteApiKey: session?.siteApiKey || null,
+                from: 'agent',
+                senderId: msg.senderId ? String(msg.senderId) : null,
+                senderName: msg.senderName,
+                text: sanitized,
+                escalate: false,
+                ts: timestamp
+            });
+        }
     }
 
     /**
@@ -279,6 +308,37 @@ function createChatHandlers({
 
         // Acknowledge receipt
         socket.emit(OUT.CHAT_MESSAGE_SENT, { id: msg.id, timestamp });
+
+        // Mirror to lyg_hub. Set escalate=true when the chatbot's
+        // escalation keywords match this message — that's the
+        // signal lyg_hub uses to graduate the chat into a ticket.
+        if (lygHub && lygHub.enabled) {
+            let escalate = false;
+            try {
+                const cfg = (chatbotService && typeof chatbotService.getConfig === 'function')
+                    ? chatbotService.getConfig() || {}
+                    : {};
+                if (chatbotService && typeof chatbotService._matchesEscalation === 'function') {
+                    escalate = !!chatbotService._matchesEscalation(
+                        String(sanitized).toLowerCase(),
+                        cfg
+                    );
+                }
+            } catch (_) { /* never break chat for this */ }
+
+            mirrorToLygHub({
+                event: 'message',
+                messageId: lygHub.genMessageId(),
+                sessionId: socket.sessionId,
+                siteApiKey: session.siteApiKey || null,
+                from: 'customer',
+                senderId: socket.sessionId, // visitors are anonymous; sessionId is stable
+                senderName: session.name,
+                text: sanitized,
+                escalate,
+                ts: timestamp
+            });
+        }
 
         return msg;
     }

@@ -33,8 +33,17 @@ function createSessionHandlers({
     sessions,
     getRealIP,
     analyzeIP,
-    generateId
+    generateId,
+    lygHub
 }) {
+
+    /** Fire-and-forget lyg_hub mirror. Never throws. */
+    function mirrorToLygHub(payload) {
+        if (!lygHub || !lygHub.enabled) return;
+        Promise.resolve()
+            .then(() => lygHub.send(payload))
+            .catch(() => { /* swallowed; chat must keep working */ });
+    }
 
     /**
      * Broadcast to all admins
@@ -213,6 +222,25 @@ function createSessionHandlers({
         });
 
         console.log(`New session ${sessionId} started by ${sanitizedName} from ${ip}`);
+
+        // Mirror to lyg_hub: pending row only, no ticket created.
+        if (lygHub && lygHub.enabled) {
+            // Stash siteApiKey on the session so subsequent message
+            // mirrors can include it without re-resolving the site.
+            session.siteApiKey = site?.api_key || null;
+            mirrorToLygHub({
+                event: 'session.opened',
+                messageId: lygHub.genMessageId(),
+                sessionId,
+                siteApiKey: session.siteApiKey,
+                from: 'customer',
+                senderId: sessionId,
+                senderName: sanitizedName,
+                text: '',
+                escalate: false,
+                ts: session.startTime
+            });
+        }
     }
 
     /**
@@ -497,6 +525,24 @@ function createSessionHandlers({
             sessionId,
             updates: { ticketStatus: status, status }
         });
+
+        // Mirror to lyg_hub on resolve so the linked ticket (if any)
+        // closes. Sent for every resolve transition; lyg_hub treats
+        // it as a control event and writes no inbound row.
+        if (status === 'resolved' && lygHub && lygHub.enabled) {
+            mirrorToLygHub({
+                event: 'session.resolved',
+                messageId: lygHub.genMessageId(),
+                sessionId,
+                siteApiKey: session?.siteApiKey || null,
+                from: 'agent',
+                senderId: socket.adminUser?.id ? String(socket.adminUser.id) : null,
+                senderName: socket.adminUser?.nickname || socket.adminUser?.username || 'Admin',
+                text: '',
+                escalate: false,
+                ts: Date.now()
+            });
+        }
     }
 
     function handleAdminResolve(socket, sessionId) {

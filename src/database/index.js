@@ -7,7 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { runSeed } = require('./seed');
+const { runSeed, bootstrapAdminFromEnv } = require('./seed');
 
 // Seed the data directory from data-seed/ before loading any JsonDB
 // instances. This is a no-op when data files already exist.
@@ -41,6 +41,14 @@ const messageRepository = new MessageRepository(messagesDB, ticketsDB);
 const auditRepository = new AuditRepository(auditDB);
 const sessionRepository = new SessionRepository(sessionsDB, usersDB);
 const siteRepository = new SiteRepository(sitesDB, ticketsDB);
+
+// Bootstrap a single admin from env vars when the users table is empty.
+// Idempotent: skipped silently once any user exists. See seed.js docs.
+// Fire-and-forget at module load — failure must not crash the app, since
+// the operator can always recover via scripts/reset-admin-password.js.
+bootstrapAdminFromEnv(userRepository).catch(err => {
+    console.warn('[seed] bootstrap admin failed:', err && err.message ? err.message : err);
+});
 
 // Chatbot configuration (file-based, not repository pattern)
 const chatbotConfig = {

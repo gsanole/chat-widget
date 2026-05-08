@@ -98,4 +98,109 @@ function runSeed() {
     seedFromDirectory(seedDir, dataDir);
 }
 
-module.exports = { runSeed, seedFromDirectory };
+/**
+ * Bootstrap a single admin user from environment variables when no users
+ * exist on disk. Idempotent — once the users table has any row, this is a
+ * no-op forever (so rotating env vars doesn't silently re-create accounts).
+ *
+ * Required env vars (BOTH must be set, OR the username + a plaintext password):
+ *   BOOTSTRAP_ADMIN_USERNAME       (required)
+ *   BOOTSTRAP_ADMIN_PASSWORD_HASH  (preferred — pre-hashed bcrypt)
+ *   BOOTSTRAP_ADMIN_PASSWORD       (fallback — hashed at startup, cost 12)
+ *   BOOTSTRAP_ADMIN_EMAIL          (optional; defaults to <username>@localhost)
+ *   BOOTSTRAP_ADMIN_NICKNAME       (optional; defaults to "Super Support")
+ *
+ * Pattern adopted from lyg_hub: keep credential material out of git.
+ * On Render set these as dashboard env vars (sync: false).
+ *
+ * @param {Object} userRepository - the live UserRepository (must expose
+ *                                  findAll(), and either db.insert() or
+ *                                  create()).
+ * @param {Object} [envVars]      - defaults to process.env (overridable for
+ *                                  tests).
+ * @param {Object} [logger]       - defaults to console.
+ * @returns {Promise<{ seeded: boolean, reason?: string }>}
+ */
+async function bootstrapAdminFromEnv(userRepository, envVars = process.env, logger = console) {
+    if (!userRepository) return { seeded: false, reason: 'no-repository' };
+
+    const username = envVars.BOOTSTRAP_ADMIN_USERNAME;
+    let passwordHash = envVars.BOOTSTRAP_ADMIN_PASSWORD_HASH;
+    const plainPassword = envVars.BOOTSTRAP_ADMIN_PASSWORD;
+    const email = envVars.BOOTSTRAP_ADMIN_EMAIL || (username ? `${username}@localhost` : null);
+    const nickname = envVars.BOOTSTRAP_ADMIN_NICKNAME || 'Super Support';
+
+    if (!username) return { seeded: false, reason: 'no-username' };
+    if (!passwordHash && !plainPassword) return { seeded: false, reason: 'no-password' };
+
+    // If anyone already exists, do nothing. Rotation is a deliberate manual
+    // act (delete data/users.json on the persistent disk + restart).
+    let existing;
+    try {
+        existing = typeof userRepository.findAll === 'function'
+            ? userRepository.findAll()
+            : [];
+    } catch (err) {
+        logger.warn?.('[seed] bootstrap: failed to read users:', err.message);
+        return { seeded: false, reason: 'read-failed' };
+    }
+    if (Array.isArray(existing) && existing.length > 0) {
+        return { seeded: false, reason: 'users-exist' };
+    }
+
+    if (!passwordHash) {
+        // Hash the plaintext at boot (one-time, dev convenience). Cost 12
+        // matches the rest of the project.
+        try {
+            const bcrypt = require('bcrypt');
+            passwordHash = await bcrypt.hash(plainPassword, 12);
+        } catch (err) {
+            logger.warn?.('[seed] bootstrap: bcrypt hash failed:', err.message);
+            return { seeded: false, reason: 'hash-failed' };
+        }
+    }
+
+    if (!/^\$2[aby]\$\d{2}\$/.test(passwordHash)) {
+        logger.warn?.('[seed] bootstrap: BOOTSTRAP_ADMIN_PASSWORD_HASH is not a bcrypt hash; refusing to seed');
+        return { seeded: false, reason: 'bad-hash-format' };
+    }
+
+    // Insert directly via the repository's underlying db so we can preset
+    // the pre-hashed password without re-hashing it through create().
+    const { generateId } = require('./repositories/BaseRepository');
+    const nowSec = Math.floor(Date.now() / 1000);
+    const user = {
+        id: generateId(),
+        username,
+        email,
+        nickname,
+        password_hash: passwordHash,
+        role: 'super_admin',
+        is_active: 1,
+        totp_secret: null,
+        totp_enabled: 0,
+        recovery_codes: null,
+        password_reset_token: null,
+        password_reset_expires: null,
+        last_login: null,
+        created_at: nowSec,
+        created_by: null,
+        updated_at: nowSec
+    };
+
+    try {
+        if (userRepository.db && typeof userRepository.db.insert === 'function') {
+            userRepository.db.insert(user);
+        } else {
+            return { seeded: false, reason: 'no-insert' };
+        }
+    } catch (err) {
+        logger.warn?.('[seed] bootstrap: insert failed:', err.message);
+        return { seeded: false, reason: 'insert-failed' };
+    }
+
+    logger.log?.(`[seed] bootstrap: created super_admin "${username}" from env`);
+    return { seeded: true };
+}
+
+module.exports = { runSeed, seedFromDirectory, bootstrapAdminFromEnv };

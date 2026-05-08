@@ -29,3 +29,14 @@ services:
         generateValue: true # Render generates a strong random value once.
       - key: ALLOWED_ORIGINS
         sync: false # set in dashboard, e.g. https://yoursite.com,https://www.yoursite.com
+
+      # Bootstrap admin (used only when users.json is empty / first boot).
+      # Set BOTH in the Render dashboard. Once any user exists these are
+      # ignored — rotation is a deliberate manual step.
+      #
+      # Generate a hash locally with:  npm run hash-password
+      # Then paste the resulting "$2b$12$..." string into the dashboard.
+      - key: BOOTSTRAP_ADMIN_USERNAME
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD_HASH
+        sync: false

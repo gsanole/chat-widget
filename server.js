@@ -52,15 +52,10 @@ async function startServer() {
     console.log('===========================================');
   });
 
-  try {
-    const created = await db.initializeSuperAdmin();
-    if (created) {
-      console.log('DEFAULT SUPER ADMIN CREATED - Username: superadmin / Password: changeme123!');
-    }
-  } catch (err) {
-    console.error('Failed to start server:', err);
-    process.exit(1);
-  }
+  // Admin user is created by bootstrapAdminFromEnv at module load
+  // (see src/database/index.js). The legacy initializeSuperAdmin path
+  // is intentionally not called here — it would race with bootstrap and
+  // could insert a duplicate user with the literal 'changeme123!' fallback.
 }
 
 if (require.main === module) {

@@ -59,24 +59,10 @@ describe('startServer()', () => {
         logSpy.mockRestore();
     });
 
-    test('startServer handles errors via process.exit', async () => {
-        // Force initializeSuperAdmin to throw and verify exit branch is reached
-        const errSpy = jest.spyOn(console, 'error').mockImplementation(() => { });
-        const origExit = process.exit;
-        const exitMock = jest.fn();
-        process.exit = exitMock;
-        const origInit = serverModule.db.initializeSuperAdmin;
-        serverModule.db.initializeSuperAdmin = jest.fn(() => Promise.reject(new Error('boom')));
-
-        await serverModule.startServer();
-
-        expect(errSpy).toHaveBeenCalledWith('Failed to start server:', expect.any(Error));
-        expect(exitMock).toHaveBeenCalledWith(1);
-
-        // Restore
-        serverModule.db.initializeSuperAdmin = origInit;
-        process.exit = origExit;
-        errSpy.mockRestore();
+    test('startServer is idempotent and resolves on already-listening server', async () => {
+        // Second invocation must not throw and must leave the server listening.
+        await expect(serverModule.startServer()).resolves.toBeUndefined();
+        expect(serverModule.server.listening).toBe(true);
     });
 });
 

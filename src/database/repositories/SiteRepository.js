@@ -34,6 +34,12 @@ class SiteRepository extends BaseRepository {
             color_secondary: '#1e40af',
             welcome_message: null,
             allowed_origins: Array.isArray(allowed_origins) ? allowed_origins : null,
+            // Per-site integration (outbound webhook + inbound HMAC).
+            // Shape: { enabled, url, secret, events? }
+            //   - url:    base URL of the receiver (e.g. https://hub.example.com)
+            //   - secret: HMAC-SHA256 secret shared with the receiver
+            //   - events: optional allow-list (omit/null = all events)
+            integration: null,
             created_at: now(),
             updated_at: now()
         };
@@ -107,6 +113,44 @@ class SiteRepository extends BaseRepository {
      */
     updateChatbotConfig(id, config) {
         return this.db.update(s => s.id === id, { chatbot_config: config });
+    }
+
+    /**
+     * Replace the integration config for a site. Pass null to clear it.
+     * Shape: { enabled: boolean, url: string, secret: string, events?: string[] }
+     * @param {string} id
+     * @param {Object|null} integration
+     * @returns {Object|null}
+     */
+    updateIntegration(id, integration) {
+        let value = null;
+        if (integration && typeof integration === 'object') {
+            value = {
+                enabled: integration.enabled !== false && !!integration.url,
+                url: integration.url ? String(integration.url).replace(/\/+$/, '') : null,
+                secret: integration.secret || null,
+                events: Array.isArray(integration.events) ? integration.events : null
+            };
+        }
+        return this.db.update(s => s.id === id, { integration: value });
+    }
+
+    /**
+     * Generate and store a fresh integration secret. Returns the new secret.
+     * Creates an integration record (disabled, no url) if one doesn't exist yet.
+     */
+    regenerateIntegrationSecret(id) {
+        const site = this.db.find(s => s.id === id);
+        if (!site) return null;
+        const newSecret = generateToken();
+        const next = {
+            enabled: site.integration?.enabled || false,
+            url: site.integration?.url || null,
+            secret: newSecret,
+            events: site.integration?.events || null
+        };
+        this.db.update(s => s.id === id, { integration: next });
+        return newSecret;
     }
 
     /**

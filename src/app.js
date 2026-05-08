@@ -72,7 +72,8 @@ const {
     createTicketsRouter,
     createAuditRouter,
     createSitesRouter,
-    createChatbotRouter
+    createChatbotRouter,
+    createIntegrationsRouter
 } = require('./routes');
 
 // Socket handlers
@@ -148,8 +149,13 @@ function createApp(options = {}) {
     // CORS
     app.use(cors(createCorsOptions()));
 
-    // Body parsing
-    app.use(express.json({ limit: '1mb' }));
+    // Body parsing. `verify` captures the raw body bytes so HMAC-signed
+    // integration endpoints (see /api/integrations) can validate the
+    // signature against the exact bytes the sender hashed.
+    app.use(express.json({
+        limit: '1mb',
+        verify: (req, _res, buf) => { req.rawBody = buf; }
+    }));
     app.use(express.urlencoded({ extended: true }));
 
     // Health/readiness endpoints — registered BEFORE rate limiter so platform
@@ -444,18 +450,6 @@ function createApp(options = {}) {
         res.sendFile(path.join(__dirname, '../public/widget.js'));
     });
 
-    // 404 handler
-    app.use((req, res, next) => {
-        // Don't 404 for static files or socket.io
-        if (req.path.startsWith('/socket.io')) {
-            return next();
-        }
-        next(new NotFoundError('Route not found'));
-    });
-
-    // Error handler
-    app.use(errorHandler);
-
     // ===========================================
     // SOCKET.IO SETUP
     // ===========================================
@@ -477,6 +471,33 @@ function createApp(options = {}) {
     };
 
     const socketState = setupSocketIO(io, socketDeps);
+
+    // ===========================================
+    // HUB INTEGRATION ROUTES (mounted AFTER socket setup so the
+    // route handlers can reach the live `sessions` / `adminSockets`
+    // maps via socketState).
+    // ===========================================
+    app.use('/api/integrations', createIntegrationsRouter({
+        io,
+        messageRepository: db.messages,
+        ticketRepository: db.tickets,
+        siteRepository: db.sites,
+        auditRepository: db.audit,
+        getSessions: () => socketState.sessions,
+        getAdminSockets: () => socketState.adminSockets
+    }));
+
+    // 404 handler — must be LAST middleware before the error handler.
+    app.use((req, res, next) => {
+        // Don't 404 for static files or socket.io
+        if (req.path.startsWith('/socket.io')) {
+            return next();
+        }
+        next(new NotFoundError('Route not found'));
+    });
+
+    // Error handler
+    app.use(errorHandler);
 
     // ===========================================
     // BACKGROUND SERVICES

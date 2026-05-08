@@ -8,7 +8,7 @@ const { createAdminHandlers } = require('./handlers/adminHandlers');
 const { createChatHandlers } = require('./handlers/chatHandlers');
 const { createSessionHandlers } = require('./handlers/sessionHandlers');
 const { SocketRateLimiter } = require('../middleware/rateLimiter');
-const { createLygHubWebhook } = require('../services/lygHubWebhook');
+const { createWebhookBridge } = require('../services/lygHubWebhook');
 const { IN } = require('./events');
 
 /**
@@ -54,11 +54,11 @@ function setupSocketIO(io, deps) {
         connectionWindowMs: 60000
     });
 
-    // lyg_hub bridge (no-op when LYG_HUB_URL is unset). Allow override
-    // via deps.lygHub for tests.
-    const lygHub = deps.lygHub || createLygHubWebhook({
-        url: process.env.LYG_HUB_URL,
-        secret: process.env.LYG_HUB_INBOUND_CHAT_SECRET
+    // Per-site outbound webhook bridge. Resolves the destination URL +
+    // secret at send-time from each site's `integration` config; sites
+    // without integration get a no-op. Override via deps.webhook for tests.
+    const webhook = deps.webhook || createWebhookBridge({
+        siteRepository
     });
 
     // Create handlers with dependencies
@@ -84,7 +84,7 @@ function setupSocketIO(io, deps) {
         getRealIP,
         hasPermission,
         chatbotService,
-        lygHub
+        webhook
     });
 
     const sessionHandlers = createSessionHandlers({
@@ -97,7 +97,7 @@ function setupSocketIO(io, deps) {
         getRealIP,
         analyzeIP,
         generateId,
-        lygHub
+        webhook
     });
 
     // Connection handling

@@ -1,77 +1,132 @@
 /**
- * lyg_hub Webhook Bridge
+ * Site Integration Webhook Bridge
  *
- * Single Responsibility: fire chat lifecycle events at the lyg_hub
- * `/inbound/chat` endpoint so the support team can triage them in
- * the lyg_hub /inbox.
+ * Single Responsibility: deliver chat lifecycle / message events to the
+ * outbound webhook URL configured **on each site**. Each tenant owns its
+ * own receiver URL and HMAC secret (see SiteRepository.integration).
  *
- * Design rules (mirror lyg_hub side):
- *   - chat events are NOT auto-tickets in lyg_hub by default; they
- *     land as `pending`. lyg_hub only routes a delivery into a
- *     ticket when `escalate=true` OR the session is already linked.
- *   - this client never throws into the calling socket handler.
- *     If lyg_hub is unreachable / slow / 5xx, the customer chat
- *     keeps working — webhook errors are logged and swallowed.
+ * Design rules:
+ *   - Multi-tenant. There is no global hub. The bridge looks up the
+ *     site by `siteId` at send-time. If the site has no integration
+ *     enabled, the call is a no-op.
+ *   - Fire-and-forget. Never throws into the calling socket handler.
+ *     If a tenant's receiver is unreachable / slow / 5xx, the customer
+ *     chat keeps working — webhook errors are logged and swallowed.
  *
  * Auth: HMAC-SHA256 over the raw JSON body, sent in
- * `X-LygHub-Signature: sha256=<hex>`. Secret comes from
- * LYG_HUB_INBOUND_CHAT_SECRET (must match lyg_hub's).
- *
- * Disabled when LYG_HUB_URL is unset (e.g. local dev without lyg_hub).
+ *   X-Chat-Signature: sha256=<hex>
+ * The secret is the site-specific `integration.secret`. The receiver
+ * verifies with the SAME secret (configured on its side when the site
+ * admin generated it from /sites/:id/integration).
  */
 
 const crypto = require('crypto');
 
 /**
  * @param {Object} opts
- * @param {string} [opts.url]    - Base URL of lyg_hub (e.g. https://hub.example.com)
- * @param {string} [opts.secret] - HMAC secret shared with lyg_hub
- * @param {Function} [opts.fetchImpl] - fetch impl (defaults to global fetch; injected in tests)
+ * @param {Object} opts.siteRepository - SiteRepository (must expose findById)
+ * @param {Function} [opts.fetchImpl]  - fetch impl (defaults to global fetch; injected in tests)
  * @param {{ warn?: Function, info?: Function }} [opts.log]
  */
-function createLygHubWebhook({ url, secret, fetchImpl, log = console } = {}) {
-    const enabled = !!url;
+function createWebhookBridge({ siteRepository, fetchImpl, log = console } = {}) {
     const f = fetchImpl || globalThis.fetch;
-    const endpoint = enabled ? `${url.replace(/\/+$/, '')}/inbound/chat` : null;
 
     /**
-     * Send an event to lyg_hub. Always resolves; never throws.
-     * @param {Object} payload - Event payload (see lyg_hub chatInboundPayload schema)
-     * @returns {Promise<{ok:boolean, skipped?:boolean, status?:number, error?:string}>}
+     * Resolve a site's integration config. Returns null if disabled / missing.
      */
-    async function send(payload) {
-        if (!enabled) return { ok: true, skipped: true };
+    function resolveTarget(siteId) {
+        if (!siteId || !siteRepository || typeof siteRepository.findById !== 'function') return null;
+        const site = siteRepository.findById(siteId);
+        const integ = site?.integration;
+        if (!integ || !integ.enabled || !integ.url || !integ.secret) return null;
+        return { url: integ.url, secret: integ.secret, events: integ.events || null };
+    }
+
+    /**
+     * POST a payload to the resolved tenant. Always resolves; never throws.
+     * Skipped silently if no integration is configured for this site or the
+     * event is not in the site's allow-list.
+     *
+     * @param {string} siteId
+     * @param {Object} payload  - must include `event` and `messageId`
+     */
+    async function send(siteId, payload) {
+        const target = resolveTarget(siteId);
+        if (!target) return { ok: true, skipped: true };
+        if (target.events && Array.isArray(target.events) && target.events.length > 0) {
+            if (!target.events.includes(payload.event)) return { ok: true, skipped: true };
+        }
         if (typeof f !== 'function') {
-            log.warn?.('[lygHub] no fetch implementation available; skipping');
+            log.warn?.('[webhook] no fetch implementation available; skipping');
             return { ok: false, error: 'no-fetch' };
         }
         try {
             const body = JSON.stringify(payload);
-            const headers = { 'content-type': 'application/json' };
-            if (secret) {
-                const sig = crypto.createHmac('sha256', secret).update(body).digest('hex');
-                headers['x-lyghub-signature'] = `sha256=${sig}`;
-            }
-            const res = await f(endpoint, { method: 'POST', headers, body });
+            const sig = crypto.createHmac('sha256', target.secret).update(body).digest('hex');
+            const headers = {
+                'content-type': 'application/json',
+                'x-chat-signature': `sha256=${sig}`,
+                'x-chat-event': String(payload.event || ''),
+                'x-chat-delivery': String(payload.messageId || '')
+            };
+            const res = await f(target.url, { method: 'POST', headers, body });
             if (!res || !res.ok) {
                 log.warn?.(
-                    `[lygHub] non-OK ${res?.status ?? 'no-response'} for ${payload.event} ${payload.messageId}`
+                    `[webhook] site=${siteId} non-OK ${res?.status ?? 'no-response'} for ${payload.event} ${payload.messageId}`
                 );
                 return { ok: false, status: res?.status };
             }
             return { ok: true };
         } catch (err) {
-            log.warn?.(`[lygHub] webhook error: ${err?.message || err}`);
+            log.warn?.(`[webhook] site=${siteId} error: ${err?.message || err}`);
             return { ok: false, error: err?.message || String(err) };
         }
     }
 
-    /** Generate a per-delivery messageId (lyg_hub uses this as idempotency key). */
+    /** Fire-and-forget mirror. Never throws. */
+    function mirror(siteId, payload) {
+        if (!resolveTarget(siteId)) return;
+        Promise.resolve()
+            .then(() => send(siteId, payload))
+            .catch(() => { /* swallowed */ });
+    }
+
+    /** Generate a per-delivery messageId (used as idempotency key). */
     function genMessageId() {
         return crypto.randomUUID();
     }
 
-    return { send, genMessageId, enabled, endpoint };
+    return { send, mirror, genMessageId, resolveTarget };
 }
 
-module.exports = { createLygHubWebhook };
+/**
+ * Verify an inbound HMAC signature using a known site secret.
+ * Constant-time compare.
+ *
+ * @param {string|Buffer} rawBody    Raw request body bytes
+ * @param {string} signatureHeader   Value of `X-Chat-Signature` (with or without `sha256=` prefix)
+ * @param {string} secret            The site's integration.secret
+ * @returns {boolean}
+ */
+function verifySignature(rawBody, signatureHeader, secret) {
+    if (!secret || !signatureHeader || rawBody == null) return false;
+    const provided = String(signatureHeader).replace(/^sha256=/i, '').trim();
+    if (!/^[0-9a-f]+$/i.test(provided)) return false;
+    const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+    if (provided.length !== expected.length) return false;
+    try {
+        return crypto.timingSafeEqual(
+            Buffer.from(provided, 'hex'),
+            Buffer.from(expected, 'hex')
+        );
+    } catch {
+        return false;
+    }
+}
+
+module.exports = {
+    createWebhookBridge,
+    verifySignature,
+    // Back-compat alias for older imports.
+    createLygHubWebhook: createWebhookBridge
+};

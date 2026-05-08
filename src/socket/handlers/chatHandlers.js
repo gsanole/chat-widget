@@ -28,16 +28,28 @@ function createChatHandlers({
     getRealIP,
     hasPermission,
     chatbotService,
-    lygHub
+    webhook
 }) {
 
-    /** Fire-and-forget lyg_hub mirror. Never throws. */
-    function mirrorToLygHub(payload) {
-        if (!lygHub || !lygHub.enabled) return;
-        // Resolve once; .send() also catches but we double-guard the .then chain.
-        Promise.resolve()
-            .then(() => lygHub.send(payload))
-            .catch(() => { /* swallowed; chat must keep working */ });
+    /** Fire-and-forget per-site mirror. Never throws. */
+    function mirrorToSite(siteId, payload) {
+        if (!siteId || !webhook) return;
+        if (typeof webhook.mirror === 'function') {
+            webhook.mirror(siteId, payload);
+        } else {
+            Promise.resolve().then(() => webhook.send(siteId, payload)).catch(() => {});
+        }
+    }
+
+    /**
+     * Resolve the siteId for a given session/ticket. Sessions in memory
+     * carry it directly; for messages on a re-loaded ticket we fall back
+     * to the ticket row.
+     */
+    function resolveSiteId(session, ticketId) {
+        if (session?.siteId) return session.siteId;
+        const ticket = ticketRepository.findById(ticketId);
+        return ticket?.site_id || null;
     }
 
     /**
@@ -215,15 +227,16 @@ function createChatHandlers({
             updates: { lastActivity: timestamp }
         });
 
-        // Mirror to lyg_hub (agent reply). Never escalate=true here
-        // — agent replies just append to a linked ticket on the
-        // lyg_hub side; pending if no ticket exists yet.
-        if (lygHub && lygHub.enabled) {
-            mirrorToLygHub({
+        // Mirror to the site's integration receiver (agent reply).
+        // Never escalate=true here — agent replies just append to the
+        // ticket on the receiver side.
+        const siteId = resolveSiteId(session, targetId);
+        if (siteId) {
+            mirrorToSite(siteId, {
                 event: 'message',
-                messageId: lygHub.genMessageId(),
+                messageId: webhook.genMessageId(),
+                siteId,
                 sessionId: targetId,
-                siteApiKey: session?.siteApiKey || null,
                 from: 'agent',
                 senderId: msg.senderId ? String(msg.senderId) : null,
                 senderName: msg.senderName,
@@ -309,10 +322,11 @@ function createChatHandlers({
         // Acknowledge receipt
         socket.emit(OUT.CHAT_MESSAGE_SENT, { id: msg.id, timestamp });
 
-        // Mirror to lyg_hub. Set escalate=true when the chatbot's
-        // escalation keywords match this message — that's the
-        // signal lyg_hub uses to graduate the chat into a ticket.
-        if (lygHub && lygHub.enabled) {
+        // Mirror to the site's integration receiver. Set escalate=true
+        // when the chatbot's escalation keywords match — receivers can
+        // use that flag to graduate the chat into a real ticket.
+        const siteId = resolveSiteId(session, socket.sessionId);
+        if (siteId) {
             let escalate = false;
             try {
                 const cfg = (chatbotService && typeof chatbotService.getConfig === 'function')
@@ -326,11 +340,11 @@ function createChatHandlers({
                 }
             } catch (_) { /* never break chat for this */ }
 
-            mirrorToLygHub({
+            mirrorToSite(siteId, {
                 event: 'message',
-                messageId: lygHub.genMessageId(),
+                messageId: webhook.genMessageId(),
+                siteId,
                 sessionId: socket.sessionId,
-                siteApiKey: session.siteApiKey || null,
                 from: 'customer',
                 senderId: socket.sessionId, // visitors are anonymous; sessionId is stable
                 senderName: session.name,

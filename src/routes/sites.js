@@ -201,6 +201,88 @@ function createSitesRouter({ siteRepository, ticketRepository, auditRepository, 
         res.json({ success: true, api_key: newKey });
     });
 
+    // ===========================================
+    // INTEGRATION (per-site webhook config)
+    // ===========================================
+
+    // Get integration config (omits secret for safety; only flags presence)
+    router.get('/:id/integration', requireAuth, requirePermission('settings'), (req, res) => {
+        const site = siteRepository.findById(req.params.id);
+        if (!site) return res.status(404).json({ error: 'Site not found' });
+        const integ = site.integration || {};
+        res.json({
+            enabled: !!integ.enabled,
+            url: integ.url || null,
+            events: integ.events || null,
+            hasSecret: !!integ.secret
+        });
+    });
+
+    // Replace integration config. Body: { enabled, url, secret?, events? }
+    // If `secret` is omitted on first save, the server auto-generates one
+    // and returns it ONCE in the response. Caller must store it.
+    router.put('/:id/integration', requireAuth, requirePermission('settings'), (req, res) => {
+        const site = siteRepository.findById(req.params.id);
+        if (!site) return res.status(404).json({ error: 'Site not found' });
+
+        const { enabled, url, secret, events } = req.body || {};
+        let secretToStore = secret;
+        let generatedSecret = null;
+        if (!secretToStore) {
+            // Reuse existing if any; otherwise generate.
+            secretToStore = site.integration?.secret;
+            if (!secretToStore) {
+                secretToStore = require('crypto').randomBytes(32).toString('hex');
+                generatedSecret = secretToStore;
+            }
+        }
+
+        const updated = siteRepository.updateIntegration(req.params.id, {
+            enabled,
+            url,
+            secret: secretToStore,
+            events
+        });
+
+        auditLog(req, 'SITE_INTEGRATION_UPDATED', 'site', req.params.id, {
+            url: updated?.integration?.url || null,
+            enabled: !!updated?.integration?.enabled,
+            secretRotated: !!generatedSecret
+        });
+
+        res.json({
+            success: true,
+            integration: updated?.integration
+                ? {
+                    enabled: !!updated.integration.enabled,
+                    url: updated.integration.url,
+                    events: updated.integration.events,
+                    hasSecret: !!updated.integration.secret
+                }
+                : null,
+            // Returned only when freshly generated. Never echoed back later.
+            generatedSecret
+        });
+    });
+
+    // Rotate the secret. Returns the new secret ONCE.
+    router.post('/:id/integration/regenerate-secret', requireAuth, requirePermission('settings'), (req, res) => {
+        const site = siteRepository.findById(req.params.id);
+        if (!site) return res.status(404).json({ error: 'Site not found' });
+        const newSecret = siteRepository.regenerateIntegrationSecret(req.params.id);
+        auditLog(req, 'SITE_INTEGRATION_SECRET_ROTATED', 'site', req.params.id);
+        res.json({ success: true, secret: newSecret });
+    });
+
+    // Disable / clear integration entirely
+    router.delete('/:id/integration', requireAuth, requirePermission('settings'), (req, res) => {
+        const site = siteRepository.findById(req.params.id);
+        if (!site) return res.status(404).json({ error: 'Site not found' });
+        siteRepository.updateIntegration(req.params.id, null);
+        auditLog(req, 'SITE_INTEGRATION_DISABLED', 'site', req.params.id);
+        res.json({ success: true });
+    });
+
     // Delete site
     router.delete('/:id', requireAuth, requirePermission('settings'), (req, res) => {
         const site = siteRepository.findById(req.params.id);

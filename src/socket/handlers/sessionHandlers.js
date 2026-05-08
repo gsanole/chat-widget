@@ -34,16 +34,8 @@ function createSessionHandlers({
     getRealIP,
     analyzeIP,
     generateId,
-    lygHub
+    webhook
 }) {
-
-    /** Fire-and-forget lyg_hub mirror. Never throws. */
-    function mirrorToLygHub(payload) {
-        if (!lygHub || !lygHub.enabled) return;
-        Promise.resolve()
-            .then(() => lygHub.send(payload))
-            .catch(() => { /* swallowed; chat must keep working */ });
-    }
 
     /**
      * Broadcast to all admins
@@ -53,6 +45,40 @@ function createSessionHandlers({
     function broadcastToAdmins(event, data) {
         for (const { socket } of adminSockets.values()) {
             socket.emit(event, data);
+        }
+    }
+
+    /**
+     * Resolve siteId for a session/ticket. In-memory sessions carry it;
+     * ticket rows have `site_id` for sessions that have left memory.
+     */
+    function resolveSiteId(sessionId) {
+        const s = sessions.get(sessionId);
+        if (s?.siteId) return s.siteId;
+        const t = ticketRepository.findById(sessionId);
+        return t?.site_id || null;
+    }
+
+    /**
+     * Fire a session lifecycle event at the site's integration receiver.
+     * No-op when the site has no integration. Never throws.
+     */
+    function mirrorLifecycle(event, sessionId, extra = {}) {
+        if (!webhook) return;
+        const siteId = extra.siteId || resolveSiteId(sessionId);
+        if (!siteId) return;
+        const payload = {
+            event,
+            messageId: webhook.genMessageId(),
+            siteId,
+            sessionId,
+            ts: Date.now(),
+            ...extra
+        };
+        if (typeof webhook.mirror === 'function') {
+            webhook.mirror(siteId, payload);
+        } else {
+            Promise.resolve().then(() => webhook.send(siteId, payload)).catch(() => {});
         }
     }
 
@@ -221,26 +247,19 @@ function createSessionHandlers({
             lastActivity: session.lastActivity
         });
 
-        console.log(`New session ${sessionId} started by ${sanitizedName} from ${ip}`);
+        // Mirror to the site's integration receiver. Lifecycle events on
+        // the receiver side typically land as `pending` until the receiver
+        // graduates them into a ticket (e.g. on `escalate=true` later, or
+        // when the receiver already has a ticket linked to this sessionId).
+        mirrorLifecycle('session.opened', sessionId, {
+            siteId: site?.id || null,
+            customerName: sanitizedName,
+            customerIp: ip,
+            geo: ipAnalysis?.geo || null,
+            contact: session.contact || null
+        });
 
-        // Mirror to lyg_hub: pending row only, no ticket created.
-        if (lygHub && lygHub.enabled) {
-            // Stash siteApiKey on the session so subsequent message
-            // mirrors can include it without re-resolving the site.
-            session.siteApiKey = site?.api_key || null;
-            mirrorToLygHub({
-                event: 'session.opened',
-                messageId: lygHub.genMessageId(),
-                sessionId,
-                siteApiKey: session.siteApiKey,
-                from: 'customer',
-                senderId: sessionId,
-                senderName: sanitizedName,
-                text: '',
-                escalate: false,
-                ts: session.startTime
-            });
-        }
+        console.log(`New session ${sessionId} started by ${sanitizedName} from ${ip}`);
     }
 
     /**
@@ -343,6 +362,8 @@ function createSessionHandlers({
                 updates: { status: 'ended' }
             });
 
+            mirrorLifecycle('session.closed', sessionId, { reason: 'customer_ended' });
+
             console.log(`Session ${sessionId} ended by customer`);
         }
 
@@ -414,6 +435,11 @@ function createSessionHandlers({
                 updates: { status: 'closed' }
             });
 
+            mirrorLifecycle('session.closed', sessionId, {
+                reason: 'admin_closed',
+                actor: socket.adminUser?.username || null
+            });
+
             console.log(`Session ${sessionId} closed by admin ${socket.adminUser?.username}`);
         }
     }
@@ -441,6 +467,9 @@ function createSessionHandlers({
         });
         // Also notify admins that the active session is gone (test/UI contract)
         broadcastToAdmins(OUT.SESSION_REMOVED, { sessionId });
+        mirrorLifecycle('session.archived', sessionId, {
+            actor: socket.adminUser?.username || null
+        });
         console.log(`Session ${sessionId} archived by admin ${socket.adminUser?.username}`);
     }
 
@@ -461,6 +490,9 @@ function createSessionHandlers({
         broadcastToAdmins(OUT.SESSION_UPDATED, {
             sessionId,
             updates: { ticketStatus: 'open', status: 'open' }
+        });
+        mirrorLifecycle('session.unarchived', sessionId, {
+            actor: socket.adminUser?.username || null
         });
         console.log(`Session ${sessionId} unarchived by admin ${socket.adminUser?.username}`);
     }
@@ -483,6 +515,9 @@ function createSessionHandlers({
 
         const removed = ticketRepository.delete(sessionId);
         broadcastToAdmins(OUT.SESSION_REMOVED, { sessionId });
+        mirrorLifecycle('session.deleted', sessionId, {
+            actor: socket.adminUser?.username || null
+        });
         console.log(`Session ${sessionId} deleted by admin ${socket.adminUser?.username} (db removed: ${removed})`);
     }
 
@@ -526,23 +561,10 @@ function createSessionHandlers({
             updates: { ticketStatus: status, status }
         });
 
-        // Mirror to lyg_hub on resolve so the linked ticket (if any)
-        // closes. Sent for every resolve transition; lyg_hub treats
-        // it as a control event and writes no inbound row.
-        if (status === 'resolved' && lygHub && lygHub.enabled) {
-            mirrorToLygHub({
-                event: 'session.resolved',
-                messageId: lygHub.genMessageId(),
-                sessionId,
-                siteApiKey: session?.siteApiKey || null,
-                from: 'agent',
-                senderId: socket.adminUser?.id ? String(socket.adminUser.id) : null,
-                senderName: socket.adminUser?.nickname || socket.adminUser?.username || 'Admin',
-                text: '',
-                escalate: false,
-                ts: Date.now()
-            });
-        }
+        mirrorLifecycle('session.status_changed', sessionId, {
+            status,
+            actor: socket.adminUser?.username || null
+        });
     }
 
     function handleAdminResolve(socket, sessionId) {

@@ -10,6 +10,7 @@ const { createTicketsRouter } = require('./tickets');
 const { createAuditRouter } = require('./audit');
 const { createSitesRouter } = require('./sites');
 const { createChatbotRouter } = require('./chatbot');
+const { createIntegrationsRouter } = require('./integrations');
 
 module.exports = {
     createAuthRouter,
@@ -17,5 +18,6 @@ module.exports = {
     createTicketsRouter,
     createAuditRouter,
     createSitesRouter,
-    createChatbotRouter
+    createChatbotRouter,
+    createIntegrationsRouter
 };

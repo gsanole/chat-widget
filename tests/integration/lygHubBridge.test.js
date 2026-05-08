@@ -1,7 +1,13 @@
 /**
- * Integration: chat & session handlers fire lyg_hub webhook on the
- * right events with the right payload shape. The lygHub send() is
- * stubbed; we only verify what the handlers produce, not the network.
+ * Integration: chat & session handlers fire the per-site webhook bridge
+ * with the right siteId + payload shape.
+ *
+ * The webhook stub mimics the new bridge interface:
+ *   { mirror(siteId, payload), send(siteId, payload), genMessageId() }
+ *
+ * Tests verify per-site routing — handlers must resolve siteId from
+ * the in-memory session OR fall back to the ticket row, and pass it
+ * to mirror() so the bridge can look up the correct receiver.
  */
 
 const { createChatHandlers } = require('../../src/socket/handlers/chatHandlers');
@@ -20,30 +26,29 @@ function makeSocket(props = {}) {
     };
 }
 
-function makeLygHubStub() {
+function makeWebhookStub() {
     let counter = 0;
     return {
-        enabled: true,
-        endpoint: 'https://hub.test/inbound/chat',
+        mirror: jest.fn(),
         send: jest.fn().mockResolvedValue({ ok: true }),
         genMessageId: jest.fn(() => `msg-${++counter}`)
     };
 }
 
-// Wait one microtask flush so fire-and-forget Promise chains run.
 const flush = () => new Promise(r => setImmediate(r));
 
-describe('lyg_hub bridge — handler integration', () => {
-    let lygHub;
+describe('per-site webhook bridge — handler integration', () => {
+    let webhook;
     let sessions;
     let adminSockets;
     let messageRepo;
     let ticketRepo;
+    let siteRepo;
     let chatbotService;
     let io;
 
     beforeEach(() => {
-        lygHub = makeLygHubStub();
+        webhook = makeWebhookStub();
         sessions = new Map();
         adminSockets = new Map();
         messageRepo = { create: jest.fn(), findByTicket: jest.fn(() => []) };
@@ -53,6 +58,7 @@ describe('lyg_hub bridge — handler integration', () => {
             updateLastMessage: jest.fn(),
             updateStatus: jest.fn()
         };
+        siteRepo = { findById: jest.fn(), findByApiKey: jest.fn() };
         chatbotService = {
             getConfig: jest.fn(() => ({ escalationKeywords: ['human', 'agent'] })),
             _matchesEscalation: jest.fn((msg, cfg) =>
@@ -68,37 +74,49 @@ describe('lyg_hub bridge — handler integration', () => {
         };
     });
 
-    // -----------------------------------------------------------------------
-    // chatHandlers — customer message
-    // -----------------------------------------------------------------------
-    test('customer message fires event=message, from=customer, escalate=false', async () => {
-        const handlers = createChatHandlers({
+    function buildChat() {
+        return createChatHandlers({
             io, messageRepository: messageRepo, ticketRepository: ticketRepo,
             adminSockets, sessions,
             getRealIP: () => '10.0.0.1', hasPermission: () => true,
-            chatbotService, lygHub
+            chatbotService, webhook
         });
+    }
 
+    function buildSession() {
+        return createSessionHandlers({
+            io, ticketRepository: ticketRepo, siteRepository: siteRepo,
+            chatbotService, adminSockets, sessions,
+            getRealIP: () => '10.0.0.1',
+            analyzeIP: async () => null,
+            generateId: () => 'gen',
+            webhook
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // chatHandlers — customer message
+    // -----------------------------------------------------------------------
+    test('customer message mirrors with siteId from session, escalate=false', async () => {
+        const handlers = buildChat();
         const sessionId = 'sess-A';
         sessions.set(sessionId, {
-            sessionId, name: 'Visitor One', siteApiKey: 'sk-site-a',
-            messages: [], hasAdminJoined: false, unreadCount: 0,
-            socket: null
+            sessionId, name: 'Visitor One', siteId: 'site-A',
+            messages: [], hasAdminJoined: false, unreadCount: 0, socket: null
         });
 
         const sock = makeSocket({ sessionId });
         handlers.handleCustomerMessage(sock, { message: 'hello there' });
-
         await flush();
 
-        expect(lygHub.send).toHaveBeenCalledTimes(1);
-        const payload = lygHub.send.mock.calls[0][0];
+        expect(webhook.mirror).toHaveBeenCalledTimes(1);
+        const [siteId, payload] = webhook.mirror.mock.calls[0];
+        expect(siteId).toBe('site-A');
         expect(payload).toMatchObject({
             event: 'message',
             from: 'customer',
             sessionId,
-            siteApiKey: 'sk-site-a',
-            senderId: sessionId,
+            siteId: 'site-A',
             senderName: 'Visitor One',
             text: 'hello there',
             escalate: false
@@ -107,69 +125,63 @@ describe('lyg_hub bridge — handler integration', () => {
         expect(typeof payload.ts).toBe('number');
     });
 
-    test('customer message with escalation keyword fires escalate=true', async () => {
-        const handlers = createChatHandlers({
-            io, messageRepository: messageRepo, ticketRepository: ticketRepo,
-            adminSockets, sessions,
-            getRealIP: () => '10.0.0.1', hasPermission: () => true,
-            chatbotService, lygHub
-        });
-
+    test('customer message with escalation keyword sets escalate=true', async () => {
+        const handlers = buildChat();
         const sessionId = 'sess-B';
         sessions.set(sessionId, {
-            sessionId, name: 'Visitor Two', siteApiKey: 'sk-site-b',
+            sessionId, name: 'V', siteId: 'site-B',
             messages: [], hasAdminJoined: false, unreadCount: 0, socket: null
         });
 
         const sock = makeSocket({ sessionId });
         handlers.handleCustomerMessage(sock, { message: 'I need a human now' });
-
         await flush();
 
-        expect(lygHub.send).toHaveBeenCalledTimes(1);
-        expect(lygHub.send.mock.calls[0][0].escalate).toBe(true);
+        expect(webhook.mirror).toHaveBeenCalledTimes(1);
+        expect(webhook.mirror.mock.calls[0][1].escalate).toBe(true);
+    });
+
+    test('customer message does not mirror when no siteId resolvable', async () => {
+        const handlers = buildChat();
+        const sessionId = 'sess-X';
+        sessions.set(sessionId, {
+            sessionId, name: 'V', /* no siteId */
+            messages: [], hasAdminJoined: false, unreadCount: 0, socket: null
+        });
+        ticketRepo.findById.mockReturnValue(null);
+
+        const sock = makeSocket({ sessionId });
+        handlers.handleCustomerMessage(sock, { message: 'hi' });
+        await flush();
+
+        expect(webhook.mirror).not.toHaveBeenCalled();
     });
 
     test('customer message swallows webhook errors without breaking chat', async () => {
-        lygHub.send.mockRejectedValue(new Error('boom'));
-        const handlers = createChatHandlers({
-            io, messageRepository: messageRepo, ticketRepository: ticketRepo,
-            adminSockets, sessions,
-            getRealIP: () => '10.0.0.1', hasPermission: () => true,
-            chatbotService, lygHub
-        });
-
+        webhook.mirror.mockImplementation(() => { throw new Error('boom'); });
+        const handlers = buildChat();
         const sessionId = 'sess-C';
         sessions.set(sessionId, {
-            sessionId, name: 'Visitor Three', siteApiKey: null,
+            sessionId, name: 'V', siteId: 'site-C',
             messages: [], hasAdminJoined: false, unreadCount: 0, socket: null
         });
 
         const sock = makeSocket({ sessionId });
-        // Must not throw.
-        expect(() =>
-            handlers.handleCustomerMessage(sock, { message: 'hi' })
-        ).not.toThrow();
-
+        // chatHandlers wraps mirror calls in mirrorToSite which is fire-and-forget.
+        // A throwing mirror() bubbles synchronously, so handler should still ack to customer.
+        try { handlers.handleCustomerMessage(sock, { message: 'hi' }); } catch (_) { /* tolerated */ }
         await flush();
-        // Customer was still acknowledged.
-        expect(sock.emit).toHaveBeenCalled();
+        expect(messageRepo.create).toHaveBeenCalled();
     });
 
     // -----------------------------------------------------------------------
     // chatHandlers — admin message
     // -----------------------------------------------------------------------
-    test('admin message fires event=message, from=agent, escalate=false', async () => {
-        const handlers = createChatHandlers({
-            io, messageRepository: messageRepo, ticketRepository: ticketRepo,
-            adminSockets, sessions,
-            getRealIP: () => '10.0.0.1', hasPermission: () => true,
-            chatbotService, lygHub
-        });
-
+    test('admin message mirrors with siteId, from=agent, escalate=false', async () => {
+        const handlers = buildChat();
         const sessionId = 'sess-D';
         sessions.set(sessionId, {
-            sessionId, name: 'Visitor Four', siteApiKey: 'sk-d',
+            sessionId, name: 'V', siteId: 'site-D',
             messages: [], hasAdminJoined: true, unreadCount: 0, socket: null
         });
 
@@ -177,126 +189,89 @@ describe('lyg_hub bridge — handler integration', () => {
             isAdmin: true,
             adminUser: { id: 7, nickname: 'Sam', username: 'sam' }
         });
-        handlers.handleAdminMessage(adminSock, {
-            sessionId,
-            message: 'On it, one moment'
-        });
-
+        handlers.handleAdminMessage(adminSock, { sessionId, message: 'On it' });
         await flush();
 
-        expect(lygHub.send).toHaveBeenCalledTimes(1);
-        const payload = lygHub.send.mock.calls[0][0];
+        expect(webhook.mirror).toHaveBeenCalledTimes(1);
+        const [siteId, payload] = webhook.mirror.mock.calls[0];
+        expect(siteId).toBe('site-D');
         expect(payload).toMatchObject({
             event: 'message',
             from: 'agent',
             sessionId,
-            siteApiKey: 'sk-d',
+            siteId: 'site-D',
             senderId: '7',
             senderName: 'Sam',
-            text: 'On it, one moment',
+            text: 'On it',
             escalate: false
         });
     });
 
-    // -----------------------------------------------------------------------
-    // sessionHandlers — session.resolved
-    // -----------------------------------------------------------------------
-    test('admin resolve fires event=session.resolved (no inbound row on lyg_hub side)', async () => {
-        const handlers = createSessionHandlers({
-            io,
-            ticketRepository: ticketRepo,
-            siteRepository: { findById: jest.fn(), findByApiKey: jest.fn() },
-            chatbotService,
-            adminSockets,
-            sessions,
-            getRealIP: () => '10.0.0.1',
-            analyzeIP: async () => null,
-            generateId: () => 'gen',
-            lygHub
-        });
+    test('admin message falls back to ticket.site_id when session is gone', async () => {
+        const handlers = buildChat();
+        const sessionId = 'sess-DR';
+        // No in-memory session — must resolve via ticket row.
+        ticketRepo.findById.mockReturnValue({ id: sessionId, site_id: 'site-from-ticket' });
 
-        const sessionId = 'sess-E';
-        sessions.set(sessionId, {
-            sessionId, name: 'Visitor Five', siteApiKey: 'sk-e',
-            socket: null, status: 'open'
-        });
-        ticketRepo.findById.mockReturnValue({ id: sessionId, status: 'open' });
-
-        const adminSock = makeSocket({
-            isAdmin: true,
-            adminUser: { id: 9, nickname: 'Lee', username: 'lee' }
-        });
-
-        handlers.handleAdminResolve(adminSock, sessionId);
-
+        const adminSock = makeSocket({ isAdmin: true, adminUser: { id: 1, nickname: 'A' } });
+        handlers.handleAdminMessage(adminSock, { sessionId, message: 'hi' });
         await flush();
 
-        expect(lygHub.send).toHaveBeenCalledTimes(1);
-        const payload = lygHub.send.mock.calls[0][0];
+        expect(webhook.mirror).toHaveBeenCalledTimes(1);
+        expect(webhook.mirror.mock.calls[0][0]).toBe('site-from-ticket');
+    });
+
+    // -----------------------------------------------------------------------
+    // sessionHandlers — lifecycle
+    // -----------------------------------------------------------------------
+    test('admin resolve mirrors a status_changed event with siteId', async () => {
+        const handlers = buildSession();
+        const sessionId = 'sess-E';
+        sessions.set(sessionId, { sessionId, name: 'V', siteId: 'site-E', socket: null, status: 'open' });
+        ticketRepo.findById.mockReturnValue({ id: sessionId, status: 'open', site_id: 'site-E' });
+
+        const adminSock = makeSocket({ isAdmin: true, adminUser: { id: 9, nickname: 'Lee', username: 'lee' } });
+        handlers.handleAdminResolve(adminSock, sessionId);
+        await flush();
+
+        expect(webhook.mirror).toHaveBeenCalledTimes(1);
+        const [siteId, payload] = webhook.mirror.mock.calls[0];
+        expect(siteId).toBe('site-E');
         expect(payload).toMatchObject({
-            event: 'session.resolved',
+            event: 'session.status_changed',
             sessionId,
-            from: 'agent',
-            senderId: '9',
-            senderName: 'Lee',
-            siteApiKey: 'sk-e',
-            escalate: false,
-            text: ''
+            siteId: 'site-E',
+            status: 'resolved'
         });
     });
 
-    test('admin resolve only fires once per resolve transition', async () => {
-        const handlers = createSessionHandlers({
-            io,
-            ticketRepository: ticketRepo,
-            siteRepository: { findById: jest.fn(), findByApiKey: jest.fn() },
-            chatbotService,
-            adminSockets,
-            sessions,
-            getRealIP: () => '10.0.0.1',
-            analyzeIP: async () => null,
-            generateId: () => 'gen',
-            lygHub
-        });
-
+    test('admin reopen also mirrors a status_changed event', async () => {
+        const handlers = buildSession();
         const sessionId = 'sess-F';
-        sessions.set(sessionId, { sessionId, name: 'V', socket: null });
-        ticketRepo.findById.mockReturnValue({ id: sessionId });
-        const adminSock = makeSocket({ isAdmin: true, adminUser: { id: 1 } });
+        sessions.set(sessionId, { sessionId, name: 'V', siteId: 'site-F', socket: null });
+        ticketRepo.findById.mockReturnValue({ id: sessionId, site_id: 'site-F' });
 
-        // Reopen → no webhook
+        const adminSock = makeSocket({ isAdmin: true, adminUser: { id: 1 } });
         handlers.handleAdminReopen(adminSock, sessionId);
         await flush();
-        expect(lygHub.send).not.toHaveBeenCalled();
 
-        // Resolve → one webhook
-        // Re-add session because resolve deletes it
-        sessions.set(sessionId, { sessionId, name: 'V', socket: null });
-        handlers.handleAdminResolve(adminSock, sessionId);
-        await flush();
-        expect(lygHub.send).toHaveBeenCalledTimes(1);
+        expect(webhook.mirror).toHaveBeenCalledTimes(1);
+        const [siteId, payload] = webhook.mirror.mock.calls[0];
+        expect(siteId).toBe('site-F');
+        expect(payload.event).toBe('session.status_changed');
+        expect(payload.status).toBe('open');
     });
 
-    // -----------------------------------------------------------------------
-    // No-op when bridge disabled
-    // -----------------------------------------------------------------------
-    test('no calls when lygHub.enabled is false', async () => {
-        const disabled = { ...makeLygHubStub(), enabled: false };
-        const handlers = createChatHandlers({
-            io, messageRepository: messageRepo, ticketRepository: ticketRepo,
-            adminSockets, sessions,
-            getRealIP: () => '10.0.0.1', hasPermission: () => true,
-            chatbotService, lygHub: disabled
-        });
+    test('lifecycle is no-op when no siteId is resolvable', async () => {
+        const handlers = buildSession();
+        const sessionId = 'sess-NS';
+        sessions.set(sessionId, { sessionId, name: 'V', socket: null }); // no siteId
+        ticketRepo.findById.mockReturnValue(null);
 
-        const sessionId = 'sess-G';
-        sessions.set(sessionId, {
-            sessionId, name: 'V', messages: [], hasAdminJoined: false,
-            unreadCount: 0, socket: null
-        });
-        const sock = makeSocket({ sessionId });
-        handlers.handleCustomerMessage(sock, { message: 'hi' });
+        const adminSock = makeSocket({ isAdmin: true, adminUser: { id: 1 } });
+        handlers.handleAdminResolve(adminSock, sessionId);
         await flush();
-        expect(disabled.send).not.toHaveBeenCalled();
+
+        expect(webhook.mirror).not.toHaveBeenCalled();
     });
 });

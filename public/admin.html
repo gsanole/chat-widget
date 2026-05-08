@@ -1481,6 +1481,11 @@
         });
 
         let pendingAuth = false;
+        // True only when we auto-emit `admin:auth-token` on page load with a
+        // saved token. Used so a stale/expired token doesn't surface as a
+        // user-visible "Invalid or expired token" red banner before the
+        // user has even tried to log in.
+        let isSilentTokenAuth = false;
 
         function login() {
             const username = usernameInput.value.trim();
@@ -1512,6 +1517,7 @@
         function setupAuthListeners() {
             socket.on('admin:authenticated', (data) => {
                 pendingAuth = false;
+                isSilentTokenAuth = false;
                 currentUser = data.user;
                 localStorage.setItem('adminToken', data.token);
                 loginScreen.style.display = 'none';
@@ -1528,6 +1534,15 @@
             });
 
             socket.on('admin:auth-failed', (data) => {
+                // Silent reconnect path: a stale token from a previous session
+                // (different JWT_SECRET, deleted user, etc.) shouldn't show a
+                // red banner before the user has typed anything. Just discard
+                // the token and stay on the login screen quietly.
+                if (isSilentTokenAuth) {
+                    isSilentTokenAuth = false;
+                    localStorage.removeItem('adminToken');
+                    return;
+                }
                 showLoginError(data.reason || 'Authentication failed');
                 if (!pendingAuth) {
                     passwordInput.value = '';
@@ -2277,9 +2292,12 @@
             }
         }
 
-        // Try to reconnect with saved token
+        // Try to reconnect with saved token. Mark the attempt as "silent"
+        // so a stale token doesn't render as a red error banner on first
+        // page load (see admin:auth-failed handler above).
         const savedToken = localStorage.getItem('adminToken');
         if (savedToken) {
+            isSilentTokenAuth = true;
             socket = io();
             socket.on('connect', () => {
                 socket.emit('admin:auth-token', savedToken);

@@ -46,7 +46,11 @@ const siteRepository = new SiteRepository(sitesDB, ticketsDB);
 // Idempotent: skipped silently once any user exists. See seed.js docs.
 // Fire-and-forget at module load — failure must not crash the app, since
 // the operator can always recover via scripts/reset-admin-password.js.
-bootstrapAdminFromEnv(userRepository).catch(err => {
+bootstrapAdminFromEnv(userRepository).then(result => {
+    if (result && result.seeded) return; // success path already logs
+    const reason = result && result.reason ? result.reason : 'unknown';
+    console.log(`[seed] bootstrap admin skipped: ${reason}`);
+}).catch(err => {
     console.warn('[seed] bootstrap admin failed:', err && err.message ? err.message : err);
 });
 
